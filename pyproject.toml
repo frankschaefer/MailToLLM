@@ -1,0 +1,44 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mailtollm"
+version = "0.1.0"
+description = "Parse email CSVs and attachments into LLM-ready structured outputs with a CustomTkinter UI."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Proprietary" }
+authors = [
+  { name = "Frank" }
+]
+
+dependencies = [
+  "customtkinter>=5.2",
+  "pandas>=2.2",
+  "pydantic>=2.7",
+  "python-dateutil>=2.9",
+  "python-magic>=0.4",
+  "Pillow>=10.3",
+  "pdfplumber>=0.11",
+  "python-docx>=1.1",
+  "python-pptx>=0.6",
+  "openpyxl>=3.1",
+  "tqdm>=4.66",
+  "rich>=13.7"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.2",
+  "ruff>=0.4",
+  "mypy>=1.10"
+]
+
+[tool.ruff]
+line-length = 100
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
