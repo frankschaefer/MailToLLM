@@ -26,6 +26,7 @@ class MailToLLMApp(ctk.CTk):
         self.attachments_root_var = ctk.StringVar()
         self.output_dir_var = ctk.StringVar(value=str(Path("data/output").resolve()))
         self.summary_length_var = ctk.StringVar(value="1500")
+        self.detail_logging_var = ctk.BooleanVar(value=False)
 
         self._log_queue: queue.Queue[str] = queue.Queue()
         self._pause_event = threading.Event()
@@ -89,6 +90,7 @@ class MailToLLMApp(ctk.CTk):
             command=self._browse_output,
         )
         self._add_summary_row(input_frame, row=3)
+        self._add_detail_logging_row(input_frame, row=4)
 
         actions = ctk.CTkFrame(self, fg_color="#ffffff", corner_radius=14)
         actions.grid(row=2, column=0, padx=20, pady=(0, 8), sticky="nsew")
@@ -199,6 +201,16 @@ class MailToLLMApp(ctk.CTk):
             row=row, column=2, padx=16, pady=10, sticky="w"
         )
 
+    def _add_detail_logging_row(self, parent: ctk.CTkFrame, row: int) -> None:
+        ctk.CTkLabel(parent, text="Detail Logging", text_color="#1f2a44").grid(
+            row=row, column=0, padx=16, pady=10, sticky="w"
+        )
+        ctk.CTkCheckBox(
+            parent,
+            text="Enable timing logs",
+            variable=self.detail_logging_var,
+        ).grid(row=row, column=1, padx=16, pady=10, sticky="w")
+
     def _browse_csv_folder(self) -> None:
         path = filedialog.askdirectory(title="Select CSV Folder")
         if path:
@@ -220,7 +232,8 @@ class MailToLLMApp(ctk.CTk):
             "2) Select the attachments root folder.\n"
             "3) Choose the output directory.\n"
             "4) Set the summary length (chars).\n"
-            "5) Start the pipeline. Use Pause/Stop as needed."
+            "5) Enable detail logging if needed.\n"
+            "6) Start the pipeline. Use Pause/Stop as needed."
         )
         messagebox.showinfo("MailToLLM Help", message)
 
@@ -232,6 +245,7 @@ class MailToLLMApp(ctk.CTk):
         attachments_root = Path(self.attachments_root_var.get()).expanduser()
         output_dir = Path(self.output_dir_var.get()).expanduser()
         summary_length = self._parse_summary_length()
+        detail_logging = bool(self.detail_logging_var.get())
         if summary_length is None:
             return
 
@@ -253,7 +267,7 @@ class MailToLLMApp(ctk.CTk):
 
         self._worker = threading.Thread(
             target=self._run_pipeline,
-            args=(csv_path, attachments_root, output_dir, summary_length),
+            args=(csv_path, attachments_root, output_dir, summary_length, detail_logging),
             daemon=True,
         )
         self._worker.start()
@@ -284,6 +298,7 @@ class MailToLLMApp(ctk.CTk):
         attachments_root: Path,
         output_dir: Path,
         summary_length: int,
+        detail_logging: bool,
     ) -> None:
         try:
             results = run_pipeline(
@@ -295,6 +310,7 @@ class MailToLLMApp(ctk.CTk):
                 stop_event=self._stop_event,
                 on_log=self._enqueue_log,
                 on_progress=self._on_progress,
+                detail_logging=detail_logging,
             )
             self._enqueue_log(f"Finished. Outputs: {len(results)}")
         except Exception as exc:

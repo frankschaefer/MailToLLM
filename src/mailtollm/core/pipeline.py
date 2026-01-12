@@ -42,6 +42,7 @@ def run_pipeline(
     stop_event: Event | None = None,
     on_log: LogCallback | None = None,
     on_progress: ProgressCallback | None = None,
+    detail_logging: bool = False,
 ) -> list[LLMOutput]:
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -54,18 +55,22 @@ def run_pipeline(
         if not llm_available:
             _log(on_log, f"LLM Studio not available: {llm_error}")
 
+    scan_start = time.perf_counter()
     csv_files = _collect_csv_files(csv_path)
     if not csv_files:
         _log(on_log, "No CSV files found.")
         return []
 
-    outputs: list[LLMOutput] = []
     total_records = _count_total_records(csv_files)
+    scan_elapsed = time.perf_counter() - scan_start
+    if detail_logging:
+        _log(on_log, f"Timing scan: {scan_elapsed:.2f}s")
     if total_records:
         _log(on_log, f"Scan complete: {len(csv_files)} CSV files, {total_records} emails.")
     else:
         _log(on_log, f"Scan complete: {len(csv_files)} CSV files, no emails found.")
 
+    outputs: list[LLMOutput] = []
     processed = 0
 
     def progress_hook() -> None:
@@ -95,6 +100,7 @@ def run_pipeline(
                 llm_available,
                 llm_error,
                 progress_hook,
+                detail_logging,
             )
         )
 
@@ -112,6 +118,7 @@ def _run_single_csv(
     llm_available: bool,
     llm_error: str | None,
     on_progress: Callable[[], None] | None,
+    detail_logging: bool,
 ) -> list[LLMOutput]:
     output_dir.mkdir(parents=True, exist_ok=True)
     records = read_email_csv(csv_path, id_prefix=csv_path.stem)
@@ -146,11 +153,15 @@ def _run_single_csv(
             body_html=record["body_html"],
         )
 
-        attachment_paths = resolve_attachment_paths(
-            attachments_root,
-            record["folder"],
-            record["attachment_names"],
+        attachment_paths, resolve_elapsed = _time_call(
+            lambda: resolve_attachment_paths(
+                attachments_root,
+                record["folder"],
+                record["attachment_names"],
+            )
         )
+        if detail_logging:
+            _log(on_log, f"Timing resolve attachments ({record['id']}): {resolve_elapsed:.2f}s")
 
         attachment_contents: list[AttachmentContent] = []
         warnings: list[WarningRecord] = []
@@ -172,21 +183,40 @@ def _run_single_csv(
                     size_bytes=path.stat().st_size,
                 )
             )
-            content, content_warnings = _parse_attachment(path, attachment_id)
+            (content, content_warnings), parse_elapsed = _time_call(
+                lambda: _parse_attachment(path, attachment_id)
+            )
+            if detail_logging:
+                _log(
+                    on_log,
+                    f"Timing parse {path.name} ({record['id']}): {parse_elapsed:.2f}s",
+                )
             attachment_contents.append(content)
             warnings.extend(content_warnings)
 
         email.attachments = attachments
 
-        combined_context = _build_context(email, attachment_contents)
-        entities = extract_entities(combined_context)
+        combined_context, context_elapsed = _time_call(
+            lambda: _build_context(email, attachment_contents)
+        )
+        entities, entity_elapsed = _time_call(lambda: extract_entities(combined_context))
+        if detail_logging:
+            _log(on_log, f"Timing build context ({record['id']}): {context_elapsed:.2f}s")
+            _log(on_log, f"Timing entity extract ({record['id']}): {entity_elapsed:.2f}s")
         contacts_for_email = _entities_to_contacts(record["id"], entities)
         contacts.extend(contacts_for_email)
 
         summary_text = ""
         if summary_length and summary_length > 0:
             if llm_available:
-                summary_text, summary_warning = summarize_text(combined_context, summary_length)
+                (summary_text, summary_warning), summary_elapsed = _time_call(
+                    lambda: summarize_text(combined_context, summary_length)
+                )
+                if detail_logging:
+                    _log(
+                        on_log,
+                        f"Timing summary ({record['id']}): {summary_elapsed:.2f}s",
+                    )
                 if summary_warning:
                     summary_warning.attachment_id = record["id"]
                     warnings.append(summary_warning)
@@ -209,7 +239,9 @@ def _run_single_csv(
             summary_text=summary_text,
             combined_context=combined_context,
         )
-        write_output_json(output_dir, output)
+        _, write_elapsed = _time_call(lambda: write_output_json(output_dir, output))
+        if detail_logging:
+            _log(on_log, f"Timing write output ({record['id']}): {write_elapsed:.2f}s")
         outputs.append(output)
         if on_progress:
             on_progress()
@@ -288,6 +320,12 @@ def _count_csv_records(csv_path: Path) -> int:
             return sum(1 for _ in reader)
     except Exception:
         return 0
+
+
+def _time_call(func: Callable[[], object]) -> tuple[object, float]:
+    start = time.perf_counter()
+    result = func()
+    return result, time.perf_counter() - start
 
 
 def _build_context(email: EmailRecord, attachments: list[AttachmentContent]) -> str:
