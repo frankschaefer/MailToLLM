@@ -213,6 +213,7 @@ def _run_single_csv(
                     lambda: summarize_text(
                         combined_context,
                         summary_length,
+                        file_ext=".email",
                         on_log=on_log,
                         detail_logging=detail_logging,
                     )

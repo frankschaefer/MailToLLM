@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 import json
 
-from mailtollm.services.llm_client import check_llm_available, summarize_text
+from mailtollm.services.llm_client import check_llm_available, get_prompt_for_filetype, summarize_text
 
 
 def test_check_llm_available_failure() -> None:
@@ -56,6 +56,7 @@ def test_summarize_text_detail_logging() -> None:
             summary, warning = summarize_text(
                 "text",
                 100,
+                file_ext=".email",
                 on_log=logs.append,
                 detail_logging=True,
             )
@@ -63,3 +64,9 @@ def test_summarize_text_detail_logging() -> None:
     assert summary == "short summary"
     assert warning is None
     assert any("LLM request" in entry for entry in logs)
+
+
+def test_prompt_for_filetype_contains_keywords() -> None:
+    prompt = get_prompt_for_filetype(".pdf", summary_max_chars=1500)
+    assert "Schluesselbegriffe:" in prompt
+    assert "Fokus:" in prompt
