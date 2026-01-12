@@ -56,6 +56,7 @@ Produce one JSON per email. Keep all fields explicit and normalized to ease LLM 
       "notes": "string"
     }
   ],
+  "summary_text": "LLM summary (max length configured in UI)",
   "combined_context": "LLM prompt-ready blend of email + attachment content"
 }
 ```

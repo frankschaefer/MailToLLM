@@ -59,4 +59,5 @@ class LLMOutput(BaseModel):
     attachment_contents: list[AttachmentContent] = Field(default_factory=list)
     entities: EntityIndex = Field(default_factory=EntityIndex)
     contacts_export: list[ContactExportRecord] = Field(default_factory=list)
+    summary_text: str = ""
     combined_context: str = ""

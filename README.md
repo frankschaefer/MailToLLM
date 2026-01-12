@@ -15,6 +15,16 @@ pip install -e .
 python -m mailtollm.ui.app
 ```
 
+## OCR setup
+For OCR on images and scanned PDFs, install Tesseract on your system and ensure it is on PATH.
+The Python dependency `pytesseract` is included in the project dependencies.
+
+## LLM summary (LM Studio)
+By default, summaries are sent to `http://localhost:1234/v1/chat/completions` using the model
+name `local-model`. Override via environment variables:
+- `LLM_STUDIO_URL`
+- `LLM_STUDIO_MODEL`
+
 ## Folder notes
 - `data/raw` contains CSVs and source folders.
 - `data/processed` contains normalized intermediate files.
