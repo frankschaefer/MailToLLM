@@ -93,7 +93,7 @@ def _run_single_csv(
     llm_error: str | None,
 ) -> list[LLMOutput]:
     output_dir.mkdir(parents=True, exist_ok=True)
-    records = read_email_csv(csv_path)
+    records = read_email_csv(csv_path, id_prefix=csv_path.stem)
 
     outputs: list[LLMOutput] = []
     contacts: list[ContactExportRecord] = []

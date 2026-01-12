@@ -86,8 +86,9 @@ def _align_row(row: list[str], size: int) -> list[str]:
     return row
 
 
-def read_email_csv(csv_path: Path) -> list[dict[str, Any]]:
+def read_email_csv(csv_path: Path, id_prefix: str | None = None) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
+    prefix = _sanitize_id_prefix(id_prefix)
 
     with csv_path.open(newline="", encoding="utf-8", errors="replace") as handle:
         reader = csv.reader(handle)
@@ -134,7 +135,10 @@ def read_email_csv(csv_path: Path) -> list[dict[str, Any]]:
 
         for idx, row in enumerate(reader):
             row = _align_row(row, len(headers))
-            record_id = _safe_str(row[id_col]) if id_col is not None else f"row-{idx+1}"
+            if id_col is not None:
+                record_id = _safe_str(row[id_col])
+            else:
+                record_id = f"{prefix}{idx+1:06d}"
 
             sender = ""
             if sender_name_col is not None or sender_addr_col is not None:
@@ -177,3 +181,12 @@ def read_email_csv(csv_path: Path) -> list[dict[str, Any]]:
             )
 
     return records
+
+
+def _sanitize_id_prefix(value: str | None) -> str:
+    if not value:
+        return ""
+    cleaned = value.strip().replace("/", "_").replace("\\", "_").replace(" ", "_")
+    if cleaned:
+        return f"{cleaned}-"
+    return ""
