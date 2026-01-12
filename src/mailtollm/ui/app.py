@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import queue
 import threading
+import time
+from datetime import datetime, timedelta
 from pathlib import Path
 from tkinter import filedialog, messagebox
 
@@ -29,6 +31,9 @@ class MailToLLMApp(ctk.CTk):
         self._pause_event = threading.Event()
         self._stop_event = threading.Event()
         self._worker: threading.Thread | None = None
+        self._start_time: float | None = None
+        self._total_records = 0
+        self._processed_records = 0
 
         self._build_ui()
         self.after(200, self._poll_logs)
@@ -86,7 +91,7 @@ class MailToLLMApp(ctk.CTk):
         self._add_summary_row(input_frame, row=3)
 
         actions = ctk.CTkFrame(self, fg_color="#ffffff", corner_radius=14)
-        actions.grid(row=2, column=0, padx=20, pady=(0, 16), sticky="nsew")
+        actions.grid(row=2, column=0, padx=20, pady=(0, 8), sticky="nsew")
         actions.grid_columnconfigure(0, weight=1)
         actions.grid_rowconfigure(1, weight=1)
 
@@ -137,6 +142,28 @@ class MailToLLMApp(ctk.CTk):
 
         self.status = ctk.CTkTextbox(actions, height=320)
         self.status.grid(row=1, column=0, padx=16, pady=(0, 16), sticky="nsew")
+
+        footer = ctk.CTkFrame(self, fg_color="#e9edf5", corner_radius=12)
+        footer.grid(row=3, column=0, padx=20, pady=(0, 16), sticky="ew")
+        footer.grid_columnconfigure((1, 3, 5), weight=1)
+
+        ctk.CTkLabel(footer, text="Start", text_color="#1f2a44").grid(
+            row=0, column=0, padx=12, pady=8, sticky="w"
+        )
+        self.start_time_label = ctk.CTkLabel(footer, text="--", text_color="#1f2a44")
+        self.start_time_label.grid(row=0, column=1, padx=12, pady=8, sticky="w")
+
+        ctk.CTkLabel(footer, text="Duration", text_color="#1f2a44").grid(
+            row=0, column=2, padx=12, pady=8, sticky="w"
+        )
+        self.duration_label = ctk.CTkLabel(footer, text="00:00:00", text_color="#1f2a44")
+        self.duration_label.grid(row=0, column=3, padx=12, pady=8, sticky="w")
+
+        ctk.CTkLabel(footer, text="ETA", text_color="#1f2a44").grid(
+            row=0, column=4, padx=12, pady=8, sticky="w"
+        )
+        self.eta_label = ctk.CTkLabel(footer, text="--", text_color="#1f2a44")
+        self.eta_label.grid(row=0, column=5, padx=12, pady=8, sticky="w")
 
     def _add_path_row(
         self,
@@ -217,6 +244,10 @@ class MailToLLMApp(ctk.CTk):
 
         self._pause_event.clear()
         self._stop_event.clear()
+        self._start_time = time.time()
+        self._total_records = 0
+        self._processed_records = 0
+        self._update_timing()
         self._set_controls(running=True)
         self._enqueue_log("Starting pipeline...")
 
@@ -263,6 +294,7 @@ class MailToLLMApp(ctk.CTk):
                 pause_event=self._pause_event,
                 stop_event=self._stop_event,
                 on_log=self._enqueue_log,
+                on_progress=self._on_progress,
             )
             self._enqueue_log(f"Finished. Outputs: {len(results)}")
         except Exception as exc:
@@ -274,6 +306,10 @@ class MailToLLMApp(ctk.CTk):
         self.start_btn.configure(state="disabled" if running else "normal")
         self.pause_btn.configure(state="normal" if running else "disabled")
         self.stop_btn.configure(state="normal" if running else "disabled")
+
+    def _on_progress(self, processed: int, total: int) -> None:
+        self._processed_records = processed
+        self._total_records = total
 
     def _parse_summary_length(self) -> int | None:
         value = self.summary_length_var.get().strip()
@@ -292,6 +328,25 @@ class MailToLLMApp(ctk.CTk):
             self.status.see("end")
         self.after(200, self._poll_logs)
 
+    def _update_timing(self) -> None:
+        if self._start_time is None:
+            self.start_time_label.configure(text="--")
+            self.duration_label.configure(text="00:00:00")
+            self.eta_label.configure(text="--")
+            return
+
+        start_dt = datetime.fromtimestamp(self._start_time)
+        self.start_time_label.configure(text=start_dt.strftime("%H:%M:%S"))
+
+        elapsed = time.time() - self._start_time
+        self.duration_label.configure(text=_format_duration(elapsed))
+
+        eta = _estimate_eta(elapsed, self._processed_records, self._total_records)
+        self.eta_label.configure(text=eta)
+
+        if self._worker and self._worker.is_alive():
+            self.after(1000, self._update_timing)
+
 
 def parse_summary_length(value: str) -> int | None:
     cleaned = value.strip()
@@ -300,6 +355,27 @@ def parse_summary_length(value: str) -> int | None:
     if not cleaned.isdigit():
         return None
     return int(cleaned)
+
+
+def _format_duration(seconds: float) -> str:
+    total_seconds = max(0, int(seconds))
+    hours = total_seconds // 3600
+    minutes = (total_seconds % 3600) // 60
+    secs = total_seconds % 60
+    return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
+
+def _estimate_eta(elapsed: float, processed: int, total: int) -> str:
+    if total <= 0:
+        return "--"
+    if processed <= 0:
+        return "calculating"
+    remaining = total - processed
+    if remaining <= 0:
+        return "00:00:00"
+    per_item = elapsed / processed
+    eta_seconds = remaining * per_item
+    return _format_duration(eta_seconds)
 
 
 if __name__ == "__main__":

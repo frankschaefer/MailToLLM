@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import os
 import time
 from pathlib import Path
@@ -29,6 +30,7 @@ from mailtollm.services.llm_client import check_llm_available, summarize_text
 from mailtollm.services.outlook_exporter import write_outlook_contacts
 
 LogCallback = Callable[[str], None]
+ProgressCallback = Callable[[int, int], None]
 
 
 def run_pipeline(
@@ -39,6 +41,7 @@ def run_pipeline(
     pause_event: Event | None = None,
     stop_event: Event | None = None,
     on_log: LogCallback | None = None,
+    on_progress: ProgressCallback | None = None,
 ) -> list[LLMOutput]:
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -57,6 +60,22 @@ def run_pipeline(
         return []
 
     outputs: list[LLMOutput] = []
+    total_records = _count_total_records(csv_files)
+    if total_records:
+        _log(on_log, f"Scan complete: {len(csv_files)} CSV files, {total_records} emails.")
+    else:
+        _log(on_log, f"Scan complete: {len(csv_files)} CSV files, no emails found.")
+
+    processed = 0
+
+    def progress_hook() -> None:
+        nonlocal processed
+        processed += 1
+        if on_progress:
+            on_progress(processed, total_records)
+        if on_log and (processed % 50 == 0 or processed == total_records):
+            _log(on_log, f"Progress: {processed}/{total_records}")
+
     for csv_file in csv_files:
         if stop_event and stop_event.is_set():
             _log(on_log, "Stop requested. Exiting pipeline.")
@@ -75,6 +94,7 @@ def run_pipeline(
                 on_log,
                 llm_available,
                 llm_error,
+                progress_hook,
             )
         )
 
@@ -91,6 +111,7 @@ def _run_single_csv(
     on_log: LogCallback | None,
     llm_available: bool,
     llm_error: str | None,
+    on_progress: Callable[[], None] | None,
 ) -> list[LLMOutput]:
     output_dir.mkdir(parents=True, exist_ok=True)
     records = read_email_csv(csv_path, id_prefix=csv_path.stem)
@@ -109,6 +130,8 @@ def _run_single_csv(
         output_path = output_dir / f"{record['id']}.json"
         if output_path.exists():
             _log(on_log, f"Skipping {record['id']} (already processed).")
+            if on_progress:
+                on_progress()
             continue
 
         _log(on_log, f"Processing {record['id']}")
@@ -188,6 +211,8 @@ def _run_single_csv(
         )
         write_output_json(output_dir, output)
         outputs.append(output)
+        if on_progress:
+            on_progress()
 
     if contacts:
         unique_contacts = _dedupe_contacts(contacts)
@@ -246,6 +271,23 @@ def _output_dir_for_csv(input_root: Path, csv_path: Path, output_root: Path) -> 
     if not filtered_parts:
         return output_root
     return output_root.joinpath(*filtered_parts)
+
+
+def _count_total_records(csv_files: list[Path]) -> int:
+    total = 0
+    for csv_file in csv_files:
+        total += _count_csv_records(csv_file)
+    return total
+
+
+def _count_csv_records(csv_path: Path) -> int:
+    try:
+        with csv_path.open(newline="", encoding="utf-8", errors="replace") as handle:
+            reader = csv.reader(handle)
+            next(reader, None)
+            return sum(1 for _ in reader)
+    except Exception:
+        return 0
 
 
 def _build_context(email: EmailRecord, attachments: list[AttachmentContent]) -> str:
