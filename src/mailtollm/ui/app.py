@@ -277,12 +277,10 @@ class MailToLLMApp(ctk.CTk):
 
     def _parse_summary_length(self) -> int | None:
         value = self.summary_length_var.get().strip()
-        if not value:
-            return 0
-        if not value.isdigit():
-            messagebox.showerror(\"Invalid summary length\", \"Use a numeric value.\")
-            return None
-        return int(value)
+        parsed = parse_summary_length(value)
+        if parsed is None:
+            messagebox.showerror("Invalid summary length", "Use a numeric value.")
+        return parsed
 
     def _enqueue_log(self, message: str) -> None:
         self._log_queue.put(message)
@@ -293,6 +291,15 @@ class MailToLLMApp(ctk.CTk):
             self.status.insert("end", f"{message}\n")
             self.status.see("end")
         self.after(200, self._poll_logs)
+
+
+def parse_summary_length(value: str) -> int | None:
+    cleaned = value.strip()
+    if not cleaned:
+        return 0
+    if not cleaned.isdigit():
+        return None
+    return int(cleaned)
 
 
 if __name__ == "__main__":
