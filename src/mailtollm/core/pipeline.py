@@ -9,7 +9,7 @@ from typing import Callable
 
 from mailtollm.io.attachment_resolver import resolve_attachment_paths
 from mailtollm.io.csv_reader import read_email_csv
-from mailtollm.io.output_writer import write_output_json
+from mailtollm.io.output_writer import read_output_json, write_output_json
 from mailtollm.models.schema import (
     AttachmentContent,
     AttachmentMeta,
@@ -43,6 +43,7 @@ def run_pipeline(
     on_log: LogCallback | None = None,
     on_progress: ProgressCallback | None = None,
     detail_logging: bool = False,
+    regenerate_summaries: bool = False,
 ) -> list[LLMOutput]:
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -101,6 +102,7 @@ def run_pipeline(
                 llm_error,
                 progress_hook,
                 detail_logging,
+                regenerate_summaries,
             )
         )
 
@@ -119,6 +121,7 @@ def _run_single_csv(
     llm_error: str | None,
     on_progress: Callable[[], None] | None,
     detail_logging: bool,
+    regenerate_summaries: bool,
 ) -> list[LLMOutput]:
     output_dir.mkdir(parents=True, exist_ok=True)
     records = read_email_csv(csv_path, id_prefix=csv_path.stem)
@@ -136,12 +139,26 @@ def _run_single_csv(
 
         output_path = output_dir / f"{record['id']}.json"
         if output_path.exists():
+            if regenerate_summaries and summary_length and summary_length > 0:
+                if _regenerate_summary(
+                    output_path,
+                    record["id"],
+                    summary_length,
+                    llm_available,
+                    llm_error,
+                    on_log,
+                    detail_logging,
+                ):
+                    if on_progress:
+                        on_progress()
+                    continue
             _log(on_log, f"Skipping {record['id']} (already processed).")
             if on_progress:
                 on_progress()
             continue
 
         _log(on_log, f"Processing {record['id']}")
+        _log(on_log, f"Mail preview: {_preview(record['body_text'])}")
 
         email = EmailRecord(
             id=record["id"],
@@ -174,6 +191,7 @@ def _run_single_csv(
             _wait_if_paused(pause_event, stop_event)
 
             attachment_id = f"{record['id']}-att-{idx}"
+            _log(on_log, f"Attachment: {path.name}")
             attachments.append(
                 AttachmentMeta(
                     id=attachment_id,
@@ -205,6 +223,7 @@ def _run_single_csv(
             _log(on_log, f"Timing entity extract ({record['id']}): {entity_elapsed:.2f}s")
         contacts_for_email = _entities_to_contacts(record["id"], entities)
         contacts.extend(contacts_for_email)
+        _log_entity_summary(on_log, record["id"], entities, contacts_for_email, detail_logging)
 
         summary_text = ""
         if summary_length and summary_length > 0:
@@ -226,6 +245,8 @@ def _run_single_csv(
                 if summary_warning:
                     summary_warning.attachment_id = record["id"]
                     warnings.append(summary_warning)
+                else:
+                    _log(on_log, f"Summary preview: {_preview(summary_text)}")
             else:
                 warnings.append(
                     WarningRecord(
@@ -332,6 +353,97 @@ def _time_call(func: Callable[[], object]) -> tuple[object, float]:
     start = time.perf_counter()
     result = func()
     return result, time.perf_counter() - start
+
+
+def _preview(text: str, max_len: int = 100) -> str:
+    cleaned = " ".join(text.split())
+    return cleaned[:max_len]
+
+
+def _regenerate_summary(
+    output_path: Path,
+    record_id: str,
+    summary_length: int,
+    llm_available: bool,
+    llm_error: str | None,
+    on_log: LogCallback | None,
+    detail_logging: bool,
+) -> bool:
+    try:
+        existing = read_output_json(output_path)
+    except Exception as exc:
+        _log(on_log, f"Failed to read output for {record_id}: {exc}")
+        return False
+
+    combined_context = existing.get("combined_context") or ""
+    if not combined_context:
+        _log(on_log, f"Missing combined_context for {record_id}, reprocessing.")
+        return False
+
+    _log(on_log, f"Regenerating summary for {record_id}")
+    _log(on_log, f"Mail preview: {_preview(combined_context)}")
+
+    if not llm_available:
+        _log(on_log, f"LLM Studio not available: {llm_error}")
+        return True
+
+    summary_text, summary_warning = summarize_text(
+        combined_context,
+        summary_length,
+        file_ext=".email",
+        on_log=on_log,
+        detail_logging=detail_logging,
+    )
+    if summary_warning:
+        _log(on_log, f"Summary failed for {record_id}: {summary_warning.details}")
+        return True
+
+    existing["summary_text"] = summary_text
+    write_output_json(output_path.parent, LLMOutput.model_validate(existing))
+    _log(on_log, f"Summary preview: {_preview(summary_text)}")
+    return True
+
+
+def _log_entity_summary(
+    on_log: LogCallback | None,
+    record_id: str,
+    entities: EntityIndex,
+    contacts: list[ContactExportRecord],
+    detail_logging: bool,
+) -> None:
+    _log(
+        on_log,
+        (
+            f"Entities ({record_id}): emails={len(entities.emails)}, "
+            f"orgs={len(entities.organizations)}, people={len(entities.people)}, "
+            f"phones={len(entities.phones)}, addresses={len(entities.addresses)}, "
+            f"contacts={len(contacts)}"
+        ),
+    )
+    if not detail_logging:
+        return
+
+    if entities.emails:
+        _log(on_log, f"Entity emails: {_format_list(entities.emails)}")
+    if entities.organizations:
+        _log(on_log, f"Entity orgs: {_format_list(entities.organizations)}")
+    if entities.people:
+        _log(on_log, f"Entity people: {_format_list(entities.people)}")
+    if entities.phones:
+        _log(on_log, f"Entity phones: {_format_list(entities.phones)}")
+    if entities.addresses:
+        _log(on_log, f"Entity addresses: {_format_list(entities.addresses)}")
+    if contacts:
+        contact_emails = [c.email or "" for c in contacts if c.email]
+        if contact_emails:
+            _log(on_log, f"Contact emails: {_format_list(contact_emails)}")
+
+
+def _format_list(values: list[str], limit: int = 20) -> str:
+    if len(values) <= limit:
+        return ", ".join(values)
+    head = ", ".join(values[:limit])
+    return f"{head} (+{len(values) - limit} more)"
 
 
 def _build_context(email: EmailRecord, attachments: list[AttachmentContent]) -> str:

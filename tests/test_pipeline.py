@@ -1,4 +1,6 @@
+import json
 from pathlib import Path
+from unittest.mock import patch
 
 from mailtollm.core.pipeline import run_pipeline
 
@@ -89,3 +91,58 @@ def test_run_pipeline_detail_logging(tmp_path: Path) -> None:
     )
 
     assert any("Timing" in entry for entry in logs)
+    assert any(entry.startswith("Entities") for entry in logs)
+
+
+def test_run_pipeline_regenerate_summary(tmp_path: Path) -> None:
+    csv_path = tmp_path / "emails.csv"
+    csv_path.write_text(
+        "id,subject,from,to,date,body\n"
+        "email-5,Hello,sender@example.com,rcpt@example.com,2026-01-06,Body\n",
+        encoding="utf-8",
+    )
+
+    attachments_root = tmp_path / "attachments"
+    attachments_root.mkdir()
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+
+    existing = {
+        "email": {
+            "id": "email-5",
+            "subject": "Hello",
+            "sender": "sender@example.com",
+            "recipients": ["rcpt@example.com"],
+            "date": "2026-01-06",
+            "body_text": "Body",
+            "body_html": None,
+            "attachments": [],
+        },
+        "warnings": [],
+        "attachment_contents": [],
+        "entities": {
+            "emails": [],
+            "organizations": [],
+            "people": [],
+            "phones": [],
+            "addresses": [],
+        },
+        "contacts_export": [],
+        "summary_text": "",
+        "combined_context": "Body",
+    }
+    (output_dir / "email-5.json").write_text(json.dumps(existing), encoding="utf-8")
+
+    with patch("mailtollm.core.pipeline.summarize_text", return_value=("sum", None)):
+        with patch("mailtollm.core.pipeline.check_llm_available", return_value=(True, None)):
+            outputs = run_pipeline(
+                csv_path,
+                attachments_root,
+                output_dir,
+                summary_length=50,
+                regenerate_summaries=True,
+            )
+
+    assert outputs == []
+    updated = json.loads((output_dir / "email-5.json").read_text(encoding="utf-8"))
+    assert updated["summary_text"] == "sum"

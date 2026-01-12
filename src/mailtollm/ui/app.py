@@ -27,6 +27,7 @@ class MailToLLMApp(ctk.CTk):
         self.output_dir_var = ctk.StringVar(value=str(Path("data/output").resolve()))
         self.summary_length_var = ctk.StringVar(value="1500")
         self.detail_logging_var = ctk.BooleanVar(value=False)
+        self.regenerate_summary_var = ctk.BooleanVar(value=False)
 
         self._log_queue: queue.Queue[str] = queue.Queue()
         self._pause_event = threading.Event()
@@ -91,6 +92,7 @@ class MailToLLMApp(ctk.CTk):
         )
         self._add_summary_row(input_frame, row=3)
         self._add_detail_logging_row(input_frame, row=4)
+        self._add_regenerate_row(input_frame, row=5)
 
         actions = ctk.CTkFrame(self, fg_color="#ffffff", corner_radius=14)
         actions.grid(row=2, column=0, padx=20, pady=(0, 8), sticky="nsew")
@@ -211,6 +213,16 @@ class MailToLLMApp(ctk.CTk):
             variable=self.detail_logging_var,
         ).grid(row=row, column=1, padx=16, pady=10, sticky="w")
 
+    def _add_regenerate_row(self, parent: ctk.CTkFrame, row: int) -> None:
+        ctk.CTkLabel(parent, text="Summary overwrite", text_color="#1f2a44").grid(
+            row=row, column=0, padx=16, pady=10, sticky="w"
+        )
+        ctk.CTkCheckBox(
+            parent,
+            text="Regenerate summaries",
+            variable=self.regenerate_summary_var,
+        ).grid(row=row, column=1, padx=16, pady=10, sticky="w")
+
     def _browse_csv_folder(self) -> None:
         path = filedialog.askdirectory(title="Select CSV Folder")
         if path:
@@ -233,7 +245,8 @@ class MailToLLMApp(ctk.CTk):
             "3) Choose the output directory.\n"
             "4) Set the summary length (chars).\n"
             "5) Enable detail logging if needed.\n"
-            "6) Start the pipeline. Use Pause/Stop as needed."
+            "6) Enable summary overwrite if needed.\n"
+            "7) Start the pipeline. Use Pause/Stop as needed."
         )
         messagebox.showinfo("MailToLLM Help", message)
 
@@ -246,6 +259,7 @@ class MailToLLMApp(ctk.CTk):
         output_dir = Path(self.output_dir_var.get()).expanduser()
         summary_length = self._parse_summary_length()
         detail_logging = bool(self.detail_logging_var.get())
+        regenerate_summaries = bool(self.regenerate_summary_var.get())
         if summary_length is None:
             return
 
@@ -267,7 +281,14 @@ class MailToLLMApp(ctk.CTk):
 
         self._worker = threading.Thread(
             target=self._run_pipeline,
-            args=(csv_path, attachments_root, output_dir, summary_length, detail_logging),
+            args=(
+                csv_path,
+                attachments_root,
+                output_dir,
+                summary_length,
+                detail_logging,
+                regenerate_summaries,
+            ),
             daemon=True,
         )
         self._worker.start()
@@ -299,6 +320,7 @@ class MailToLLMApp(ctk.CTk):
         output_dir: Path,
         summary_length: int,
         detail_logging: bool,
+        regenerate_summaries: bool,
     ) -> None:
         try:
             results = run_pipeline(
@@ -311,6 +333,7 @@ class MailToLLMApp(ctk.CTk):
                 on_log=self._enqueue_log,
                 on_progress=self._on_progress,
                 detail_logging=detail_logging,
+                regenerate_summaries=regenerate_summaries,
             )
             self._enqueue_log(f"Finished. Outputs: {len(results)}")
         except Exception as exc:
