@@ -65,9 +65,9 @@ class MailToLLMApp(ctk.CTk):
         self._add_path_row(
             input_frame,
             row=0,
-            label="CSV File",
+            label="CSV Folder",
             variable=self.csv_path_var,
-            command=self._browse_csv,
+            command=self._browse_csv_folder,
         )
         self._add_path_row(
             input_frame,
@@ -172,8 +172,8 @@ class MailToLLMApp(ctk.CTk):
             row=row, column=2, padx=16, pady=10, sticky="w"
         )
 
-    def _browse_csv(self) -> None:
-        path = filedialog.askopenfilename(title="Select CSV", filetypes=[("CSV", "*.csv")])
+    def _browse_csv_folder(self) -> None:
+        path = filedialog.askdirectory(title="Select CSV Folder")
         if path:
             self.csv_path_var.set(path)
 
@@ -189,7 +189,7 @@ class MailToLLMApp(ctk.CTk):
 
     def _on_help(self) -> None:
         message = (
-            "1) Select the CSV file with email data.\n"
+            "1) Select the folder that contains CSV files.\n"
             "2) Select the attachments root folder.\n"
             "3) Choose the output directory.\n"
             "4) Set the summary length (chars).\n"
@@ -208,8 +208,8 @@ class MailToLLMApp(ctk.CTk):
         if summary_length is None:
             return
 
-        if not csv_path.exists():
-            messagebox.showerror("Missing CSV", "Please select a valid CSV file.")
+        if not csv_path.exists() or not csv_path.is_dir():
+            messagebox.showerror("Missing CSV folder", "Please select a valid CSV folder.")
             return
         if not attachments_root.exists():
             messagebox.showerror("Missing folder", "Please select a valid attachments folder.")

@@ -41,10 +41,6 @@ def run_pipeline(
     on_log: LogCallback | None = None,
 ) -> list[LLMOutput]:
     output_dir.mkdir(parents=True, exist_ok=True)
-    records = read_email_csv(csv_path)
-
-    outputs: list[LLMOutput] = []
-    contacts: list[ContactExportRecord] = []
 
     llm_available = True
     llm_error: str | None = None
@@ -54,6 +50,55 @@ def run_pipeline(
         )
         if not llm_available:
             _log(on_log, f"LLM Studio not available: {llm_error}")
+
+    csv_files = _collect_csv_files(csv_path)
+    if not csv_files:
+        _log(on_log, "No CSV files found.")
+        return []
+
+    outputs: list[LLMOutput] = []
+    for csv_file in csv_files:
+        if stop_event and stop_event.is_set():
+            _log(on_log, "Stop requested. Exiting pipeline.")
+            break
+        _wait_if_paused(pause_event, stop_event)
+
+        csv_output_dir = _output_dir_for_csv(csv_path, csv_file, output_dir)
+        outputs.extend(
+            _run_single_csv(
+                csv_file,
+                attachments_root,
+                csv_output_dir,
+                summary_length,
+                pause_event,
+                stop_event,
+                on_log,
+                llm_available,
+                llm_error,
+            )
+        )
+
+    return outputs
+
+
+def _run_single_csv(
+    csv_path: Path,
+    attachments_root: Path,
+    output_dir: Path,
+    summary_length: int | None,
+    pause_event: Event | None,
+    stop_event: Event | None,
+    on_log: LogCallback | None,
+    llm_available: bool,
+    llm_error: str | None,
+) -> list[LLMOutput]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    records = read_email_csv(csv_path)
+
+    outputs: list[LLMOutput] = []
+    contacts: list[ContactExportRecord] = []
+
+    _log(on_log, f"Processing CSV: {csv_path}")
 
     for record in records:
         if stop_event and stop_event.is_set():
@@ -180,6 +225,27 @@ def _parse_attachment(path: Path, attachment_id: str) -> tuple[AttachmentContent
         )
 
     return AttachmentContent(id=attachment_id), []
+
+
+def _collect_csv_files(csv_path: Path) -> list[Path]:
+    if csv_path.is_dir():
+        return sorted(csv_path.rglob("*.csv"))
+    if csv_path.is_file():
+        return [csv_path]
+    return []
+
+
+def _output_dir_for_csv(input_root: Path, csv_path: Path, output_root: Path) -> Path:
+    if input_root.is_file():
+        return output_root
+    try:
+        relative = csv_path.parent.relative_to(input_root)
+    except ValueError:
+        return output_root
+    filtered_parts = [part for part in relative.parts if part.lower() != "attachments"]
+    if not filtered_parts:
+        return output_root
+    return output_root.joinpath(*filtered_parts)
 
 
 def _build_context(email: EmailRecord, attachments: list[AttachmentContent]) -> str:
