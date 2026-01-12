@@ -210,7 +210,12 @@ def _run_single_csv(
         if summary_length and summary_length > 0:
             if llm_available:
                 (summary_text, summary_warning), summary_elapsed = _time_call(
-                    lambda: summarize_text(combined_context, summary_length)
+                    lambda: summarize_text(
+                        combined_context,
+                        summary_length,
+                        on_log=on_log,
+                        detail_logging=detail_logging,
+                    )
                 )
                 if detail_logging:
                     _log(
