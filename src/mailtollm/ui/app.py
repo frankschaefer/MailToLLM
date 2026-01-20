@@ -254,22 +254,36 @@ class MailToLLMApp(ctk.CTk):
         if self._worker and self._worker.is_alive():
             return
 
-        csv_path = Path(self.csv_path_var.get()).expanduser()
-        attachments_root = Path(self.attachments_root_var.get()).expanduser()
+        # Validate inputs BEFORE doing anything else
+        csv_path_str = self.csv_path_var.get().strip()
+        if not csv_path_str:
+            messagebox.showerror("Missing CSV folder", "Please select a CSV folder first.")
+            return
+
+        attachments_root_str = self.attachments_root_var.get().strip()
+        if not attachments_root_str:
+            messagebox.showerror("Missing attachments folder", "Please select an attachments folder first.")
+            return
+
+        csv_path = Path(csv_path_str).expanduser()
+        attachments_root = Path(attachments_root_str).expanduser()
         output_dir = Path(self.output_dir_var.get()).expanduser()
+
+        if not csv_path.exists() or not csv_path.is_dir():
+            messagebox.showerror("Invalid CSV folder", "The selected CSV folder does not exist or is not a directory.")
+            return
+        if not attachments_root.exists():
+            messagebox.showerror("Invalid attachments folder", "The selected attachments folder does not exist.")
+            return
+
         summary_length = self._parse_summary_length()
-        detail_logging = bool(self.detail_logging_var.get())
-        regenerate_summaries = bool(self.regenerate_summary_var.get())
         if summary_length is None:
             return
 
-        if not csv_path.exists() or not csv_path.is_dir():
-            messagebox.showerror("Missing CSV folder", "Please select a valid CSV folder.")
-            return
-        if not attachments_root.exists():
-            messagebox.showerror("Missing folder", "Please select a valid attachments folder.")
-            return
+        detail_logging = bool(self.detail_logging_var.get())
+        regenerate_summaries = bool(self.regenerate_summary_var.get())
 
+        # All validations passed, now setup and start
         self._pause_event.clear()
         self._stop_event.clear()
         self._start_time = time.time()
@@ -306,12 +320,16 @@ class MailToLLMApp(ctk.CTk):
             self._enqueue_log("Paused.")
 
     def _on_stop(self) -> None:
-        if not self._worker or not self._worker.is_alive():
-            return
+        # Always set stop event and clear pause, even if worker is not running
+        # This ensures we can recover from any inconsistent state
         self._stop_event.set()
         self._pause_event.clear()
         self.pause_btn.configure(text="Pause")
         self._enqueue_log("Stop requested.")
+
+        # If no worker is running, reset controls immediately
+        if not self._worker or not self._worker.is_alive():
+            self._set_controls(running=False)
 
     def _run_pipeline(
         self,
