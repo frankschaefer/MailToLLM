@@ -130,10 +130,22 @@ def test_contact_manager_loads_existing_contacts(tmp_path: Path) -> None:
     )
 
     manager = ContactManager()
-    manager.load_existing_contacts(contacts_path)
+    loaded_count = manager.load_existing_contacts(contacts_path)
 
+    assert loaded_count == 1
     result = manager.get_sorted_contacts()
     assert len(result) == 1
     assert result[0].email == "test@example.com"
     assert result[0].name == "John Doe"
     assert result[0].organization == "ACME"
+
+
+def test_contact_manager_load_returns_zero_if_no_file(tmp_path: Path) -> None:
+    """Test that load_existing_contacts returns 0 if file doesn't exist."""
+    manager = ContactManager()
+    contacts_path = tmp_path / "nonexistent.csv"
+
+    loaded_count = manager.load_existing_contacts(contacts_path)
+
+    assert loaded_count == 0
+    assert len(manager.get_sorted_contacts()) == 0

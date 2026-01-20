@@ -39,6 +39,23 @@ class LLMConnectionError(Exception):
     pass
 
 
+def _save_contacts(contact_manager: ContactManager, path: Path, on_log: LogCallback | None, verbose: bool = True) -> None:
+    """Save contacts to file with optional logging.
+
+    Args:
+        contact_manager: The contact manager instance
+        path: Path to save contacts file
+        on_log: Optional logging callback
+        verbose: If True, log detailed information. If False, only save silently.
+    """
+    sorted_contacts = contact_manager.get_sorted_contacts()
+    if sorted_contacts:
+        write_global_contacts(path, sorted_contacts)
+        if verbose:
+            _log(on_log, f"Kontakte gespeichert: {path}")
+            _log(on_log, f"Total unique contacts: {len(sorted_contacts)}")
+
+
 def run_pipeline(
     csv_path: Path,
     attachments_root: Path,
@@ -80,7 +97,11 @@ def run_pipeline(
     # Initialize global contact manager
     contact_manager = ContactManager(on_log=on_log)
     global_contacts_path = output_dir / "contacts_outlook.csv"
-    contact_manager.load_existing_contacts(global_contacts_path)
+    loaded_contacts = contact_manager.load_existing_contacts(global_contacts_path)
+    if loaded_contacts > 0:
+        _log(on_log, f"Loaded {loaded_contacts} existing contacts from {global_contacts_path}")
+    else:
+        _log(on_log, "No existing contacts file found. Starting fresh.")
 
     outputs: list[LLMOutput] = []
     processed = 0
@@ -97,6 +118,8 @@ def run_pipeline(
     for csv_file in csv_files:
         if stop_event and stop_event.is_set():
             _log(on_log, "Stop requested. Exiting pipeline.")
+            # Save contacts before stopping
+            _save_contacts(contact_manager, global_contacts_path, on_log)
             break
         _wait_if_paused(pause_event, stop_event)
 
@@ -119,6 +142,8 @@ def run_pipeline(
                     contact_manager,
                 )
             )
+            # Save contacts after each CSV file to preserve progress (silently)
+            _save_contacts(contact_manager, global_contacts_path, on_log, verbose=False)
         except LLMConnectionError as exc:
             _log(on_log, "")
             _log(on_log, "=" * 80)
@@ -135,19 +160,19 @@ def run_pipeline(
             _log(on_log, "Die Verarbeitung wird beim letzten Datensatz fortgesetzt.")
             _log(on_log, "=" * 80)
             # Save contacts before exiting
-            if contact_manager:
-                sorted_contacts = contact_manager.get_sorted_contacts()
-                if sorted_contacts:
-                    write_global_contacts(global_contacts_path, sorted_contacts)
-                    _log(on_log, f"Kontakte gespeichert: {len(sorted_contacts)}")
+            _save_contacts(contact_manager, global_contacts_path, on_log)
+            raise
+        except Exception as exc:
+            _log(on_log, "")
+            _log(on_log, "=" * 80)
+            _log(on_log, f"FEHLER während der Verarbeitung: {exc}")
+            _log(on_log, "=" * 80)
+            # Save contacts before exiting
+            _save_contacts(contact_manager, global_contacts_path, on_log)
             raise
 
     # Write global contacts file at the end
-    sorted_contacts = contact_manager.get_sorted_contacts()
-    if sorted_contacts:
-        write_global_contacts(global_contacts_path, sorted_contacts)
-        _log(on_log, f"Contacts file: {global_contacts_path}")
-        _log(on_log, f"Total unique contacts: {len(sorted_contacts)}")
+    _save_contacts(contact_manager, global_contacts_path, on_log)
 
     return outputs
 

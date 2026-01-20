@@ -123,11 +123,15 @@ class ContactManager:
             key=lambda c: c.email.lower() if c.email else ""
         )
 
-    def load_existing_contacts(self, path: Path) -> None:
-        """Load existing contacts from CSV file to preserve previous data."""
-        if not path.exists():
-            return
+    def load_existing_contacts(self, path: Path) -> int:
+        """Load existing contacts from CSV file to preserve previous data.
 
+        Returns the number of contacts loaded.
+        """
+        if not path.exists():
+            return 0
+
+        loaded_count = 0
         try:
             with path.open("r", newline="", encoding="utf-8") as handle:
                 reader = csv.DictReader(handle)
@@ -144,9 +148,12 @@ class ContactManager:
                     if contact.email:
                         email_key = contact.email.lower().strip()
                         self._contacts_by_email[email_key] = contact
+                        loaded_count += 1
         except Exception:
             # If file is corrupted or format is wrong, start fresh
             pass
+
+        return loaded_count
 
 
 def write_global_contacts(path: Path, contacts: list[ContactExportRecord]) -> Path:
