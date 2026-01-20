@@ -548,10 +548,17 @@ def _should_reprocess_record(output_path: Path, on_log: LogCallback | None) -> b
 
         for warning in warnings:
             details = warning.get("details", "")
+            code = warning.get("code", "")
             if not details:
                 continue
 
-            # Check for HTTP errors from LLM Studio
+            # Skip context overflow errors - these are not recoverable without truncation
+            if "context" in details.lower() and "overflow" in details.lower():
+                continue
+            if "tokens" in details.lower() and ("4096" in details or "overflows" in details):
+                continue
+
+            # Check for recoverable LLM errors
             if "HTTP Error 400" in details or "Bad Request" in details:
                 return True
             if "HTTP Error 500" in details or "Internal Server Error" in details:
@@ -560,6 +567,8 @@ def _should_reprocess_record(output_path: Path, on_log: LogCallback | None) -> b
                 return True
             if "timeout" in details.lower():
                 return True
+            if code in ("LLM_CONNECTION_ERROR", "LLM_HTTP_ERROR"):
+                return True
 
         return False
     except Exception:
@@ -567,20 +576,30 @@ def _should_reprocess_record(output_path: Path, on_log: LogCallback | None) -> b
 
 
 def _is_llm_connection_error(warning: WarningRecord) -> bool:
-    """Check if a warning indicates an LLM connection error."""
+    """Check if a warning indicates a critical LLM connection error that should stop processing."""
     if not warning.details:
         return False
 
+    # Don't treat context overflow as connection error - it's a data issue, not connection issue
+    details_lower = warning.details.lower()
+    if "context" in details_lower and "overflow" in details_lower:
+        return False
+    if "tokens" in details_lower and ("4096" in warning.details or "overflows" in details_lower):
+        return False
+
+    # Critical connection errors
     error_indicators = [
-        "HTTP Error 400",
         "HTTP Error 500",
-        "Bad Request",
         "Internal Server Error",
         "Connection refused",
         "Connection reset",
-        "timeout",
+        "Channel Error",
         "timed out",
     ]
+
+    # Check error codes
+    if warning.code in ("LLM_CONNECTION_ERROR", "LLM_UNAVAILABLE"):
+        return True
 
     details = warning.details
     return any(indicator in details for indicator in error_indicators)

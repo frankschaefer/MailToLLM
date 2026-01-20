@@ -12,6 +12,7 @@ from mailtollm.models.schema import WarningRecord
 
 DEFAULT_URL = "http://localhost:1234/v1/chat/completions"
 DEFAULT_MODEL = "local-model"
+DEFAULT_MAX_CONTEXT_CHARS = 12000  # ~3000 tokens for input (leaving room for prompt + response)
 LogCallback = Callable[[str], None]
 
 
@@ -93,6 +94,7 @@ def summarize_text(
 
     url = os.environ.get("LLM_STUDIO_URL", DEFAULT_URL)
     model = os.environ.get("LLM_STUDIO_MODEL", DEFAULT_MODEL)
+    max_context_chars = int(os.environ.get("LLM_MAX_CONTEXT_CHARS", str(DEFAULT_MAX_CONTEXT_CHARS)))
 
     check_start = time.perf_counter()
     available, detail = check_llm_available(url)
@@ -109,6 +111,16 @@ def summarize_text(
                 details=detail,
             ),
         )
+
+    # Truncate text if it exceeds max context length
+    original_length = len(text)
+    if len(text) > max_context_chars:
+        text = text[:max_context_chars]
+        if on_log:
+            on_log(
+                f"Input text truncated from {original_length} to {max_context_chars} chars "
+                f"to fit model context window"
+            )
 
     prompt_start = time.perf_counter()
     prompt = get_prompt_for_filetype(file_ext or ".txt", summary_max_chars=max_chars)
@@ -142,6 +154,21 @@ def summarize_text(
 
         parse_start = time.perf_counter()
         data = json.loads(raw.decode("utf-8"))
+
+        # Check for error in response
+        if "error" in data:
+            error_detail = data.get("error", {})
+            error_msg = error_detail.get("message", str(error_detail)) if isinstance(error_detail, dict) else str(error_detail)
+            return (
+                "",
+                WarningRecord(
+                    attachment_id="",
+                    code="LLM_ERROR_RESPONSE",
+                    message="LLM returned error",
+                    details=error_msg,
+                ),
+            )
+
         content = _extract_content(data)
         parse_elapsed = time.perf_counter() - parse_start
 
@@ -153,6 +180,34 @@ def summarize_text(
             if detail_logging and on_log:
                 on_log(f"LLM summary truncated to {max_chars} chars")
         return content, None
+    except HTTPError as exc:
+        error_detail = f"HTTP {exc.code}: {exc.reason}"
+        try:
+            error_body = exc.read().decode("utf-8")
+            error_data = json.loads(error_body)
+            if "error" in error_data:
+                error_detail = f"{error_detail} - {error_data['error']}"
+        except Exception:
+            pass
+        return (
+            "",
+            WarningRecord(
+                attachment_id="",
+                code="LLM_HTTP_ERROR",
+                message="HTTP Fehler bei LLM Anfrage",
+                details=error_detail,
+            ),
+        )
+    except (URLError, TimeoutError, ConnectionError) as exc:
+        return (
+            "",
+            WarningRecord(
+                attachment_id="",
+                code="LLM_CONNECTION_ERROR",
+                message="Verbindungsfehler zum LLM Studio",
+                details=str(exc),
+            ),
+        )
     except Exception as exc:
         return (
             "",
