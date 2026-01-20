@@ -30,7 +30,7 @@ from mailtollm.services.entity_extractor import extract_entities
 from mailtollm.services.llm_client import check_llm_available, summarize_text
 
 LogCallback = Callable[[str], None]
-ProgressCallback = Callable[[int, int], None]
+ProgressCallback = Callable[[int, int, int], None]
 
 
 class LLMConnectionError(Exception):
@@ -77,7 +77,7 @@ def run_pipeline(
         _log(on_log, f"Scan complete: {len(csv_files)} CSV files, no emails found.")
 
     # Initialize global contact manager
-    contact_manager = ContactManager()
+    contact_manager = ContactManager(on_log=on_log)
     global_contacts_path = output_dir / "contacts_outlook.csv"
     contact_manager.load_existing_contacts(global_contacts_path)
 
@@ -88,7 +88,8 @@ def run_pipeline(
         nonlocal processed
         processed += 1
         if on_progress:
-            on_progress(processed, total_records)
+            contact_count = len(contact_manager.get_sorted_contacts())
+            on_progress(processed, total_records, contact_count)
         if on_log and (processed % 50 == 0 or processed == total_records):
             _log(on_log, f"Progress: {processed}/{total_records}")
 
@@ -270,7 +271,7 @@ def _run_single_csv(
         if detail_logging:
             _log(on_log, f"Timing build context ({record['id']}): {context_elapsed:.2f}s")
             _log(on_log, f"Timing entity extract ({record['id']}): {entity_elapsed:.2f}s")
-        contacts_for_email = _entities_to_contacts(record["id"], entities)
+        contacts_for_email = _entities_to_contacts(record["id"], entities, email)
         contact_manager.add_contacts(contacts_for_email)
         _log_entity_summary(on_log, record["id"], entities, contacts_for_email, detail_logging)
 
@@ -525,19 +526,46 @@ def _build_context(email: EmailRecord, attachments: list[AttachmentContent]) -> 
     return "\n\n".join(part for part in parts if part.strip())
 
 
-def _entities_to_contacts(source_id: str, entities: EntityIndex) -> list[ContactExportRecord]:
+def _entities_to_contacts(source_id: str, entities: EntityIndex, email_record: EmailRecord) -> list[ContactExportRecord]:
     contacts: list[ContactExportRecord] = []
-    for email in entities.emails:
+
+    # Add sender contact
+    if email_record.sender:
         contacts.append(
             ContactExportRecord(
                 source=source_id,
-                email=email,
+                email=email_record.sender,
                 organization=entities.organizations[0] if entities.organizations else None,
-                phone=entities.phones[0] if entities.phones else None,
-                address=entities.addresses[0] if entities.addresses else None,
-                notes="Auto extracted",
+                notes="Email sender",
             )
         )
+
+    # Add recipient contacts
+    for recipient in email_record.recipients:
+        if recipient:
+            contacts.append(
+                ContactExportRecord(
+                    source=source_id,
+                    email=recipient,
+                    organization=entities.organizations[0] if entities.organizations else None,
+                    notes="Email recipient",
+                )
+            )
+
+    # Add contacts from extracted entities in body/attachments
+    for email in entities.emails:
+        # Skip if already added as sender or recipient
+        if email != email_record.sender and email not in email_record.recipients:
+            contacts.append(
+                ContactExportRecord(
+                    source=source_id,
+                    email=email,
+                    organization=entities.organizations[0] if entities.organizations else None,
+                    phone=entities.phones[0] if entities.phones else None,
+                    address=entities.addresses[0] if entities.addresses else None,
+                    notes="Auto extracted from content",
+                )
+            )
     return contacts
 
 

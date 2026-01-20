@@ -36,6 +36,7 @@ class MailToLLMApp(ctk.CTk):
         self._start_time: float | None = None
         self._total_records = 0
         self._processed_records = 0
+        self._contact_count = 0
 
         self._build_ui()
         self.after(200, self._poll_logs)
@@ -142,7 +143,7 @@ class MailToLLMApp(ctk.CTk):
 
         footer = ctk.CTkFrame(self, fg_color="#e9edf5", corner_radius=12)
         footer.grid(row=3, column=0, padx=20, pady=(0, 16), sticky="ew")
-        footer.grid_columnconfigure((1, 3, 5), weight=1)
+        footer.grid_columnconfigure((1, 3, 5, 7), weight=1)
 
         ctk.CTkLabel(footer, text="Start", text_color="#1f2a44").grid(
             row=0, column=0, padx=12, pady=8, sticky="w"
@@ -161,6 +162,12 @@ class MailToLLMApp(ctk.CTk):
         )
         self.eta_label = ctk.CTkLabel(footer, text="--", text_color="#1f2a44")
         self.eta_label.grid(row=0, column=5, padx=12, pady=8, sticky="w")
+
+        ctk.CTkLabel(footer, text="Contacts", text_color="#1f2a44").grid(
+            row=0, column=6, padx=12, pady=8, sticky="w"
+        )
+        self.contacts_label = ctk.CTkLabel(footer, text="0", text_color="#1f2a44")
+        self.contacts_label.grid(row=0, column=7, padx=12, pady=8, sticky="w")
 
     def _add_path_row(
         self,
@@ -363,9 +370,12 @@ class MailToLLMApp(ctk.CTk):
         self.pause_btn.configure(state="normal" if running else "disabled")
         self.stop_btn.configure(state="normal" if running else "disabled")
 
-    def _on_progress(self, processed: int, total: int) -> None:
+    def _on_progress(self, processed: int, total: int, contacts: int = 0) -> None:
         self._processed_records = processed
         self._total_records = total
+        self._contact_count = contacts
+        # Update contacts counter in UI
+        self.after(0, lambda: self.contacts_label.configure(text=str(contacts)))
 
     def _parse_summary_length(self) -> int | None:
         value = self.summary_length_var.get().strip()
