@@ -79,20 +79,13 @@ class MailToLLMApp(ctk.CTk):
         self._add_path_row(
             input_frame,
             row=1,
-            label="Attachments Root",
-            variable=self.attachments_root_var,
-            command=self._browse_attachments,
-        )
-        self._add_path_row(
-            input_frame,
-            row=2,
             label="Output Directory",
             variable=self.output_dir_var,
             command=self._browse_output,
         )
-        self._add_summary_row(input_frame, row=3)
-        self._add_detail_logging_row(input_frame, row=4)
-        self._add_regenerate_row(input_frame, row=5)
+        self._add_summary_row(input_frame, row=2)
+        self._add_detail_logging_row(input_frame, row=3)
+        self._add_regenerate_row(input_frame, row=4)
 
         actions = ctk.CTkFrame(self, fg_color="#ffffff", corner_radius=14)
         actions.grid(row=2, column=0, padx=20, pady=(0, 8), sticky="nsew")
@@ -227,10 +220,7 @@ class MailToLLMApp(ctk.CTk):
         path = filedialog.askdirectory(title="Select CSV Folder")
         if path:
             self.csv_path_var.set(path)
-
-    def _browse_attachments(self) -> None:
-        path = filedialog.askdirectory(title="Select Attachments Root")
-        if path:
+            # Automatically set attachments root to same path
             self.attachments_root_var.set(path)
 
     def _browse_output(self) -> None:
@@ -240,13 +230,12 @@ class MailToLLMApp(ctk.CTk):
 
     def _on_help(self) -> None:
         message = (
-            "1) Select the folder that contains CSV files.\n"
-            "2) Select the attachments root folder.\n"
-            "3) Choose the output directory.\n"
-            "4) Set the summary length (chars).\n"
-            "5) Enable detail logging if needed.\n"
-            "6) Enable summary overwrite if needed.\n"
-            "7) Start the pipeline. Use Pause/Stop as needed."
+            "1) Select the CSV folder (attachments are expected in the same location).\n"
+            "2) Choose the output directory.\n"
+            "3) Set the summary length (chars).\n"
+            "4) Enable detail logging if needed.\n"
+            "5) Enable summary overwrite if needed.\n"
+            "6) Start the pipeline. Use Pause/Stop as needed."
         )
         messagebox.showinfo("MailToLLM Help", message)
 
@@ -289,7 +278,6 @@ class MailToLLMApp(ctk.CTk):
         self._start_time = time.time()
         self._total_records = 0
         self._processed_records = 0
-        self._update_timing()
         self._set_controls(running=True)
         self._enqueue_log("Starting pipeline...")
 
@@ -306,6 +294,9 @@ class MailToLLMApp(ctk.CTk):
             daemon=True,
         )
         self._worker.start()
+
+        # Start timing updates AFTER worker is started
+        self.after(100, self._update_timing)
 
     def _on_pause(self) -> None:
         if not self._worker or not self._worker.is_alive():
@@ -330,6 +321,8 @@ class MailToLLMApp(ctk.CTk):
         # If no worker is running, reset controls immediately
         if not self._worker or not self._worker.is_alive():
             self._set_controls(running=False)
+            self._start_time = None
+            self._update_timing()
 
     def _run_pipeline(
         self,
@@ -357,7 +350,13 @@ class MailToLLMApp(ctk.CTk):
         except Exception as exc:
             self._enqueue_log(f"Error: {exc}")
         finally:
-            self.after(0, lambda: self._set_controls(running=False))
+            self.after(0, lambda: self._on_pipeline_finished())
+
+    def _on_pipeline_finished(self) -> None:
+        """Called when pipeline finishes (success or error)."""
+        self._set_controls(running=False)
+        # Keep timing visible to show final duration
+        # Do NOT reset _start_time so duration stays visible
 
     def _set_controls(self, running: bool) -> None:
         self.start_btn.configure(state="disabled" if running else "normal")

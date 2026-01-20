@@ -27,26 +27,22 @@ def test_start_validation_missing_csv_folder(tmp_path: Path) -> None:
         assert "CSV folder" in mock_messagebox.showerror.call_args[0][1]
 
 
-def test_start_validation_missing_attachments_folder(tmp_path: Path) -> None:
-    """Test that start validation rejects missing attachments folder."""
+def test_csv_folder_selection_sets_attachments(tmp_path: Path) -> None:
+    """Test that CSV folder selection automatically sets attachments folder."""
     from mailtollm.ui.app import MailToLLMApp
 
-    with patch("mailtollm.ui.app.messagebox") as mock_messagebox:
-        app = MailToLLMApp()
+    app = MailToLLMApp()
 
-        # Set empty attachments folder
-        app.csv_path_var.set(str(tmp_path))
-        app.attachments_root_var.set("")
+    # Initially empty
+    assert app.attachments_root_var.get() == ""
 
-        # Mock worker check
-        app._worker = None
+    # Simulate user selecting folder via dialog
+    with patch("mailtollm.ui.app.filedialog.askdirectory", return_value=str(tmp_path)):
+        app._browse_csv_folder()
 
-        # Try to start
-        app._on_start()
-
-        # Should show error
-        mock_messagebox.showerror.assert_called_once()
-        assert "attachments folder" in mock_messagebox.showerror.call_args[0][1]
+    # Both should be set to same path
+    assert app.csv_path_var.get() == str(tmp_path)
+    assert app.attachments_root_var.get() == str(tmp_path)
 
 
 def test_start_validation_nonexistent_csv_folder(tmp_path: Path) -> None:

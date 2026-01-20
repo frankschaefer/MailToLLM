@@ -144,7 +144,8 @@ def run_pipeline(
     sorted_contacts = contact_manager.get_sorted_contacts()
     if sorted_contacts:
         write_global_contacts(global_contacts_path, sorted_contacts)
-        _log(on_log, f"Global contacts written: {len(sorted_contacts)} contacts")
+        _log(on_log, f"Contacts file: {global_contacts_path}")
+        _log(on_log, f"Total unique contacts: {len(sorted_contacts)}")
 
     return outputs
 
