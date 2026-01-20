@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import os
+import re
 import time
 from pathlib import Path
 from threading import Event
@@ -526,36 +527,68 @@ def _build_context(email: EmailRecord, attachments: list[AttachmentContent]) -> 
     return "\n\n".join(part for part in parts if part.strip())
 
 
+def _extract_email_from_field(field: str) -> str | None:
+    """Extract email address from various formats.
+
+    Supports:
+    - Plain email: 'alice@example.com'
+    - Name with email: 'Alice Smith <alice@example.com>'
+    - Name only: 'Alice Smith' -> returns None (not a valid email)
+
+    Returns the email address or None if no valid email found.
+    """
+    if not field:
+        return None
+
+    field = field.strip()
+
+    # Check for "Name <email>" format
+    match = re.search(r'<([^>]+@[^>]+)>', field)
+    if match:
+        return match.group(1).strip()
+
+    # Check if it's a plain email (contains @)
+    if '@' in field and ' ' not in field:
+        return field
+
+    # It's just a name, no email
+    return None
+
+
 def _entities_to_contacts(source_id: str, entities: EntityIndex, email_record: EmailRecord) -> list[ContactExportRecord]:
     contacts: list[ContactExportRecord] = []
+    processed_emails: set[str] = set()
 
     # Add sender contact
-    if email_record.sender:
+    sender_email = _extract_email_from_field(email_record.sender)
+    if sender_email:
         contacts.append(
             ContactExportRecord(
                 source=source_id,
-                email=email_record.sender,
+                email=sender_email,
                 organization=entities.organizations[0] if entities.organizations else None,
                 notes="Email sender",
             )
         )
+        processed_emails.add(sender_email.lower())
 
     # Add recipient contacts
     for recipient in email_record.recipients:
-        if recipient:
+        recipient_email = _extract_email_from_field(recipient)
+        if recipient_email and recipient_email.lower() not in processed_emails:
             contacts.append(
                 ContactExportRecord(
                     source=source_id,
-                    email=recipient,
+                    email=recipient_email,
                     organization=entities.organizations[0] if entities.organizations else None,
                     notes="Email recipient",
                 )
             )
+            processed_emails.add(recipient_email.lower())
 
     # Add contacts from extracted entities in body/attachments
     for email in entities.emails:
-        # Skip if already added as sender or recipient
-        if email != email_record.sender and email not in email_record.recipients:
+        if email.lower() not in processed_emails:
             contacts.append(
                 ContactExportRecord(
                     source=source_id,
@@ -566,6 +599,8 @@ def _entities_to_contacts(source_id: str, entities: EntityIndex, email_record: E
                     notes="Auto extracted from content",
                 )
             )
+            processed_emails.add(email.lower())
+
     return contacts
 
 

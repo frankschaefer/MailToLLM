@@ -42,6 +42,36 @@ The pipeline includes automatic error recovery for LLM failures:
 - **Context overflow errors**: Not reprocessed (would fail again); increase context limit or truncation is applied
 - **Critical failures**: Pipeline pauses with clear error message, can be resumed after fixing the issue
 
+## Contact Management
+The pipeline automatically extracts and manages contacts from emails:
+
+### Contact Sources
+Contacts are extracted from three sources:
+1. **Email sender** - From the "From:" field
+2. **Email recipients** - From "To:", "CC:", and "BCC:" fields
+3. **Content entities** - Email addresses found in email body and attachments
+
+### Email Address Extraction
+The system supports multiple email formats:
+- Plain email: `alice@example.com`
+- Name with email: `Alice Smith <alice@example.com>`
+- Name only (e.g., `John Doe`) - **Not extracted** as it's not a valid email address
+
+**Important**: If your CSV contains only recipient names without email addresses (e.g., "To: John Doe, Jane Smith"), these will NOT be added to the contacts file as they lack email addresses. Ensure your CSV export includes email addresses in the recipient fields.
+
+### Contact Deduplication
+- All contacts are stored in a single global `contacts_outlook.csv` file
+- Deduplication based on email address (case-insensitive)
+- Intelligent merging: when the same email appears multiple times, information is merged (longer names preferred, notes combined, etc.)
+
+### Contact Display
+- Real-time contact counter in the UI footer
+- Detailed logging showing new contacts, duplicates, and merge information
+- Example log messages:
+  - `New contact: alice@example.com (Alice Smith) - ACME Corp`
+  - `Contact duplicate (no new info): bob@example.com`
+  - `Contact updated: carol@example.com - added phone '+49 123', updated name from 'Carol' to 'Carol White'`
+
 ## Folder notes
 - `data/raw` contains CSVs and source folders.
 - `data/processed` contains normalized intermediate files.
