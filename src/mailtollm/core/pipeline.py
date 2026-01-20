@@ -25,12 +25,17 @@ from mailtollm.parsers.pdf_parser import parse_pdf
 from mailtollm.parsers.pptx_parser import parse_pptx
 from mailtollm.parsers.text_parser import parse_text
 from mailtollm.parsers.xlsx_parser import parse_xlsx
+from mailtollm.services.contact_manager import ContactManager, write_global_contacts
 from mailtollm.services.entity_extractor import extract_entities
 from mailtollm.services.llm_client import check_llm_available, summarize_text
-from mailtollm.services.outlook_exporter import write_outlook_contacts
 
 LogCallback = Callable[[str], None]
 ProgressCallback = Callable[[int, int], None]
+
+
+class LLMConnectionError(Exception):
+    """Raised when LLM connection is lost during processing."""
+    pass
 
 
 def run_pipeline(
@@ -71,6 +76,11 @@ def run_pipeline(
     else:
         _log(on_log, f"Scan complete: {len(csv_files)} CSV files, no emails found.")
 
+    # Initialize global contact manager
+    contact_manager = ContactManager()
+    global_contacts_path = output_dir / "contacts_outlook.csv"
+    contact_manager.load_existing_contacts(global_contacts_path)
+
     outputs: list[LLMOutput] = []
     processed = 0
 
@@ -89,22 +99,52 @@ def run_pipeline(
         _wait_if_paused(pause_event, stop_event)
 
         csv_output_dir = _output_dir_for_csv(csv_path, csv_file, output_dir)
-        outputs.extend(
-            _run_single_csv(
-                csv_file,
-                attachments_root,
-                csv_output_dir,
-                summary_length,
-                pause_event,
-                stop_event,
-                on_log,
-                llm_available,
-                llm_error,
-                progress_hook,
-                detail_logging,
-                regenerate_summaries,
+        try:
+            outputs.extend(
+                _run_single_csv(
+                    csv_file,
+                    attachments_root,
+                    csv_output_dir,
+                    summary_length,
+                    pause_event,
+                    stop_event,
+                    on_log,
+                    llm_available,
+                    llm_error,
+                    progress_hook,
+                    detail_logging,
+                    regenerate_summaries,
+                    contact_manager,
+                )
             )
-        )
+        except LLMConnectionError as exc:
+            _log(on_log, "")
+            _log(on_log, "=" * 80)
+            _log(on_log, "FEHLER: LLM Studio Verbindung unterbrochen")
+            _log(on_log, "=" * 80)
+            _log(on_log, f"Details: {exc}")
+            _log(on_log, "")
+            _log(on_log, "Die Verarbeitung wurde pausiert.")
+            _log(on_log, "")
+            _log(on_log, "Bitte beheben Sie das Problem (z.B. LLM Studio neu starten)")
+            _log(on_log, "und starten Sie die Verarbeitung erneut.")
+            _log(on_log, "")
+            _log(on_log, f"Bereits verarbeitete Datensätze: {processed}/{total_records}")
+            _log(on_log, "Die Verarbeitung wird beim letzten Datensatz fortgesetzt.")
+            _log(on_log, "=" * 80)
+            # Save contacts before exiting
+            if contact_manager:
+                sorted_contacts = contact_manager.get_sorted_contacts()
+                if sorted_contacts:
+                    write_global_contacts(global_contacts_path, sorted_contacts)
+                    _log(on_log, f"Kontakte gespeichert: {len(sorted_contacts)}")
+            raise
+
+    # Write global contacts file at the end
+    sorted_contacts = contact_manager.get_sorted_contacts()
+    if sorted_contacts:
+        write_global_contacts(global_contacts_path, sorted_contacts)
+        _log(on_log, f"Global contacts written: {len(sorted_contacts)} contacts")
 
     return outputs
 
@@ -122,12 +162,12 @@ def _run_single_csv(
     on_progress: Callable[[], None] | None,
     detail_logging: bool,
     regenerate_summaries: bool,
+    contact_manager: ContactManager,
 ) -> list[LLMOutput]:
     output_dir.mkdir(parents=True, exist_ok=True)
     records = read_email_csv(csv_path, id_prefix=csv_path.stem)
 
     outputs: list[LLMOutput] = []
-    contacts: list[ContactExportRecord] = []
 
     _log(on_log, f"Processing CSV: {csv_path}")
 
@@ -138,24 +178,32 @@ def _run_single_csv(
         _wait_if_paused(pause_event, stop_event)
 
         output_path = output_dir / f"{record['id']}.json"
+        should_reprocess = False
+
         if output_path.exists():
-            if regenerate_summaries and summary_length and summary_length > 0:
-                if _regenerate_summary(
-                    output_path,
-                    record["id"],
-                    summary_length,
-                    llm_available,
-                    llm_error,
-                    on_log,
-                    detail_logging,
-                ):
-                    if on_progress:
-                        on_progress()
-                    continue
-            _log(on_log, f"Skipping {record['id']} (already processed).")
-            if on_progress:
-                on_progress()
-            continue
+            # Check if record needs reprocessing due to LLM errors
+            should_reprocess = _should_reprocess_record(output_path, on_log)
+
+            if not should_reprocess:
+                if regenerate_summaries and summary_length and summary_length > 0:
+                    if _regenerate_summary(
+                        output_path,
+                        record["id"],
+                        summary_length,
+                        llm_available,
+                        llm_error,
+                        on_log,
+                        detail_logging,
+                    ):
+                        if on_progress:
+                            on_progress()
+                        continue
+                _log(on_log, f"Skipping {record['id']} (already processed).")
+                if on_progress:
+                    on_progress()
+                continue
+            else:
+                _log(on_log, f"Reprocessing {record['id']} due to previous LLM error.")
 
         _log(on_log, f"Processing {record['id']}")
         _log(on_log, f"Mail preview: {_preview(record['body_text'])}")
@@ -222,31 +270,42 @@ def _run_single_csv(
             _log(on_log, f"Timing build context ({record['id']}): {context_elapsed:.2f}s")
             _log(on_log, f"Timing entity extract ({record['id']}): {entity_elapsed:.2f}s")
         contacts_for_email = _entities_to_contacts(record["id"], entities)
-        contacts.extend(contacts_for_email)
+        contact_manager.add_contacts(contacts_for_email)
         _log_entity_summary(on_log, record["id"], entities, contacts_for_email, detail_logging)
 
         summary_text = ""
         if summary_length and summary_length > 0:
             if llm_available:
-                (summary_text, summary_warning), summary_elapsed = _time_call(
-                    lambda: summarize_text(
-                        combined_context,
-                        summary_length,
-                        file_ext=".email",
-                        on_log=on_log,
-                        detail_logging=detail_logging,
+                try:
+                    (summary_text, summary_warning), summary_elapsed = _time_call(
+                        lambda: summarize_text(
+                            combined_context,
+                            summary_length,
+                            file_ext=".email",
+                            on_log=on_log,
+                            detail_logging=detail_logging,
+                        )
                     )
-                )
-                if detail_logging:
-                    _log(
-                        on_log,
-                        f"Timing summary ({record['id']}): {summary_elapsed:.2f}s",
-                    )
-                if summary_warning:
-                    summary_warning.attachment_id = record["id"]
-                    warnings.append(summary_warning)
-                else:
-                    _log(on_log, f"Summary preview: {_preview(summary_text)}")
+                    if detail_logging:
+                        _log(
+                            on_log,
+                            f"Timing summary ({record['id']}): {summary_elapsed:.2f}s",
+                        )
+                    if summary_warning:
+                        summary_warning.attachment_id = record["id"]
+                        warnings.append(summary_warning)
+                        # Check if this is a connection error
+                        if _is_llm_connection_error(summary_warning):
+                            raise LLMConnectionError(
+                                f"LLM connection lost: {summary_warning.details}"
+                            )
+                    else:
+                        _log(on_log, f"Summary preview: {_preview(summary_text)}")
+                except LLMConnectionError:
+                    raise
+                except Exception as exc:
+                    _log(on_log, f"Unexpected error during summary: {exc}")
+                    raise LLMConnectionError(f"LLM processing failed: {exc}")
             else:
                 warnings.append(
                     WarningRecord(
@@ -272,10 +331,6 @@ def _run_single_csv(
         outputs.append(output)
         if on_progress:
             on_progress()
-
-    if contacts:
-        unique_contacts = _dedupe_contacts(contacts)
-        write_outlook_contacts(output_dir / "contacts_outlook.csv", unique_contacts)
 
     return outputs
 
@@ -485,16 +540,50 @@ def _entities_to_contacts(source_id: str, entities: EntityIndex) -> list[Contact
     return contacts
 
 
-def _dedupe_contacts(contacts: list[ContactExportRecord]) -> list[ContactExportRecord]:
-    seen: set[tuple[str | None, str | None, str | None, str | None]] = set()
-    unique: list[ContactExportRecord] = []
-    for contact in contacts:
-        key = (contact.email, contact.organization, contact.phone, contact.address)
-        if key in seen:
-            continue
-        seen.add(key)
-        unique.append(contact)
-    return unique
+def _should_reprocess_record(output_path: Path, on_log: LogCallback | None) -> bool:
+    """Check if a record should be reprocessed due to previous LLM errors."""
+    try:
+        existing = read_output_json(output_path)
+        warnings = existing.get("warnings", [])
+
+        for warning in warnings:
+            details = warning.get("details", "")
+            if not details:
+                continue
+
+            # Check for HTTP errors from LLM Studio
+            if "HTTP Error 400" in details or "Bad Request" in details:
+                return True
+            if "HTTP Error 500" in details or "Internal Server Error" in details:
+                return True
+            if "Connection refused" in details or "Connection reset" in details:
+                return True
+            if "timeout" in details.lower():
+                return True
+
+        return False
+    except Exception:
+        return False
+
+
+def _is_llm_connection_error(warning: WarningRecord) -> bool:
+    """Check if a warning indicates an LLM connection error."""
+    if not warning.details:
+        return False
+
+    error_indicators = [
+        "HTTP Error 400",
+        "HTTP Error 500",
+        "Bad Request",
+        "Internal Server Error",
+        "Connection refused",
+        "Connection reset",
+        "timeout",
+        "timed out",
+    ]
+
+    details = warning.details
+    return any(indicator in details for indicator in error_indicators)
 
 
 def _wait_if_paused(pause_event: Event | None, stop_event: Event | None) -> None:
