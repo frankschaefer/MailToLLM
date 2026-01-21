@@ -218,3 +218,39 @@ def test_is_record_worth_processing_all_empty() -> None:
         "attachment_names": [],
     }
     assert _is_record_worth_processing(record) is False
+
+
+def test_is_record_worth_processing_with_none_values() -> None:
+    """Test that records with None values are handled correctly."""
+    record = {
+        "sender": None,
+        "recipients": None,
+        "body_text": None,
+        "body_html": None,
+        "attachment_names": None,
+    }
+    assert _is_record_worth_processing(record) is False
+
+
+def test_is_record_worth_processing_with_none_sender_but_content() -> None:
+    """Test that records with None sender but content are processed."""
+    record = {
+        "sender": None,
+        "recipients": None,
+        "body_text": "This is a substantial body text with more than 50 characters of content.",
+        "body_html": None,
+        "attachment_names": None,
+    }
+    assert _is_record_worth_processing(record) is True
+
+
+def test_is_record_worth_processing_with_none_body_but_contacts() -> None:
+    """Test that records with None body but contacts are processed."""
+    record = {
+        "sender": "alice@example.com",
+        "recipients": ["bob@example.com"],
+        "body_text": None,
+        "body_html": None,
+        "attachment_names": None,
+    }
+    assert _is_record_worth_processing(record) is True

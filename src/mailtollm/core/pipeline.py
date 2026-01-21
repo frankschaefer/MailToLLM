@@ -711,15 +711,17 @@ def _is_record_worth_processing(record: dict) -> bool:
 
     Returns True if record should be processed, False if it should be skipped.
     """
-    # Check for sender or recipients
-    has_contacts = bool(record.get("sender", "").strip()) or bool(record.get("recipients"))
+    # Check for sender or recipients (handle None values)
+    sender = record.get("sender") or ""
+    recipients = record.get("recipients") or []
+    has_contacts = bool(sender.strip()) or bool(recipients)
 
     # Check for attachments
     has_attachments = bool(record.get("attachment_names"))
 
-    # Check for substantial body content
-    body_text = record.get("body_text", "").strip()
-    body_html = record.get("body_html", "").strip()
+    # Check for substantial body content (handle None values)
+    body_text = (record.get("body_text") or "").strip()
+    body_html = (record.get("body_html") or "").strip()
     has_content = len(body_text) >= 50 or len(body_html) >= 100
 
     # Process if any of these conditions are met
