@@ -108,10 +108,33 @@ def _extract_and_validate_phones(text: str) -> list[str]:
 
 
 def _extract_organizations(text: str) -> list[str]:
+    """Extract organization names from text.
+
+    Filters out common patterns that are not organizations:
+    - Titles/positions before organization (e.g., "CEO, Deeplight GmbH" -> "Deeplight GmbH")
+    """
     matches: set[str] = set()
     for suffix in ORG_SUFFIXES:
         pattern = re.compile(rf"\b([A-Z][\w&.,\s-]+\s{suffix})\b", re.IGNORECASE)
-        matches.update(m.group(1).strip() for m in pattern.finditer(text))
+        for match in pattern.finditer(text):
+            org = match.group(1).strip()
+
+            # Remove common title/position prefixes (e.g., "CEO, Company" -> "Company")
+            # Look for pattern: "Title, Organization" or "Title - Organization"
+            if ',' in org or ' - ' in org:
+                parts = re.split(r'[,-]\s*', org)
+                # Check if first part looks like a title (short, no legal suffix)
+                if len(parts) > 1:
+                    first_part = parts[0].lower()
+                    # Common titles to skip
+                    title_keywords = ['ceo', 'cto', 'cfo', 'director', 'manager', 'president',
+                                     'founder', 'owner', 'partner', 'lead', 'head']
+                    if any(keyword in first_part for keyword in title_keywords):
+                        # Use the part after the comma/dash
+                        org = ', '.join(parts[1:]).strip()
+
+            matches.add(org)
+
     return sorted(matches)
 
 

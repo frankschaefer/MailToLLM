@@ -648,6 +648,44 @@ def _extract_email_from_field(field: str) -> str | None:
     return email
 
 
+def _guess_name_from_email(email: str) -> str | None:
+    """Attempt to extract a name from an email address.
+
+    Examples:
+    - john.doe@example.com -> John Doe
+    - j.smith@example.com -> J Smith
+    - alice-wonderland@example.com -> Alice Wonderland
+    - info@company.com -> None (generic email)
+
+    Returns None if email appears to be generic/role-based.
+    """
+    if not email or '@' not in email:
+        return None
+
+    local_part = email.split('@')[0].lower()
+
+    # Skip generic/role-based emails
+    generic_prefixes = ['info', 'admin', 'support', 'contact', 'hello', 'sales',
+                       'noreply', 'no-reply', 'postmaster', 'webmaster', 'office']
+    if local_part in generic_prefixes:
+        return None
+
+    # Replace common separators with spaces
+    name_parts = re.split(r'[._-]', local_part)
+
+    # Skip if too many parts (likely not a person name)
+    if len(name_parts) > 4:
+        return None
+
+    # Capitalize each part
+    capitalized = [part.capitalize() for part in name_parts if part]
+
+    if not capitalized:
+        return None
+
+    return ' '.join(capitalized)
+
+
 def _entities_to_contacts(source_id: str, entities: EntityIndex, email_record: EmailRecord) -> list[ContactExportRecord]:
     contacts: list[ContactExportRecord] = []
     processed_emails: set[str] = set()
@@ -655,6 +693,10 @@ def _entities_to_contacts(source_id: str, entities: EntityIndex, email_record: E
     # Add sender contact
     sender_email, sender_name = _extract_email_and_name_from_field(email_record.sender)
     if sender_email:
+        # If no name from field, try to guess from email address
+        if not sender_name:
+            sender_name = _guess_name_from_email(sender_email)
+
         contacts.append(
             ContactExportRecord(
                 source=source_id,
@@ -672,6 +714,10 @@ def _entities_to_contacts(source_id: str, entities: EntityIndex, email_record: E
     for recipient in email_record.recipients:
         recipient_email, recipient_name = _extract_email_and_name_from_field(recipient)
         if recipient_email and recipient_email.lower() not in processed_emails:
+            # If no name from field, try to guess from email address
+            if not recipient_name:
+                recipient_name = _guess_name_from_email(recipient_email)
+
             contacts.append(
                 ContactExportRecord(
                     source=source_id,
@@ -686,10 +732,14 @@ def _entities_to_contacts(source_id: str, entities: EntityIndex, email_record: E
     # Add contacts from extracted entities in body/attachments
     for email in entities.emails:
         if email.lower() not in processed_emails:
+            # Try to guess name from email address
+            guessed_name = _guess_name_from_email(email)
+
             contacts.append(
                 ContactExportRecord(
                     source=source_id,
                     email=email,
+                    name=guessed_name,
                     organization=entities.organizations[0] if entities.organizations else None,
                     phone=entities.phones[0] if entities.phones else None,
                     address=entities.addresses[0] if entities.addresses else None,
