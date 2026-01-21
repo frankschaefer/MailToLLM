@@ -31,7 +31,7 @@ from mailtollm.services.entity_extractor import extract_entities
 from mailtollm.services.llm_client import check_llm_available, summarize_text
 
 LogCallback = Callable[[str], None]
-ProgressCallback = Callable[[int, int, int], None]
+ProgressCallback = Callable[[int, int, int, int, int], None]  # processed, total, contacts, emails, attachments
 
 
 class LLMConnectionError(Exception):
@@ -111,15 +111,19 @@ def run_pipeline(
 
     outputs: list[LLMOutput] = []
     processed = 0
+    total_emails = 0
+    total_attachments = 0
 
-    def progress_hook() -> None:
-        nonlocal processed
+    def progress_hook(emails_in_record: int = 0, attachments_in_record: int = 0) -> None:
+        nonlocal processed, total_emails, total_attachments
         processed += 1
+        total_emails += emails_in_record
+        total_attachments += attachments_in_record
         if on_progress:
             contact_count = len(contact_manager.get_sorted_contacts())
-            on_progress(processed, total_records, contact_count)
+            on_progress(processed, total_records, contact_count, total_emails, total_attachments)
         if on_log and (processed % 50 == 0 or processed == total_records):
-            _log(on_log, f"Progress: {processed}/{total_records}")
+            _log(on_log, f"Progress: {processed}/{total_records} | Emails: {total_emails} | Attachments: {total_attachments}")
 
     for csv_file in csv_files:
         if stop_event and stop_event.is_set():
@@ -193,7 +197,7 @@ def _run_single_csv(
     on_log: LogCallback | None,
     llm_available: bool,
     llm_error: str | None,
-    on_progress: Callable[[], None] | None,
+    on_progress: Callable[[int, int], None] | None,  # (emails, attachments)
     detail_logging: bool,
     regenerate_summaries: bool,
     contact_manager: ContactManager,
@@ -230,11 +234,15 @@ def _run_single_csv(
                         detail_logging,
                     ):
                         if on_progress:
-                            on_progress()
+                            # Count emails=1 and attachments from record
+                            num_attachments = len(record.get("attachment_names", []))
+                            on_progress(1, num_attachments)
                         continue
                 _log(on_log, f"Skipping {record['id']} (already processed).")
                 if on_progress:
-                    on_progress()
+                    # Count emails=1 and attachments from record
+                    num_attachments = len(record.get("attachment_names", []))
+                    on_progress(1, num_attachments)
                 continue
             else:
                 _log(on_log, f"Reprocessing {record['id']} due to previous LLM error.")
@@ -384,7 +392,9 @@ def _run_single_csv(
             _log(on_log, f"Timing write output ({record['id']}): {write_elapsed:.2f}s")
         outputs.append(output)
         if on_progress:
-            on_progress()
+            # Count: 1 email and actual number of attachments
+            num_attachments = len(attachment_paths)
+            on_progress(1, num_attachments)
 
     return outputs
 
