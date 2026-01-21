@@ -60,7 +60,16 @@ def _save_contacts(contact_manager: ContactManager, path: Path, on_log: LogCallb
 def _is_timeout_error(exc: LLMConnectionError) -> bool:
     """Check if an LLMConnectionError is a timeout that should be retried."""
     error_msg = str(exc).lower()
-    return "timeout" in error_msg or "timed out" in error_msg
+    # Check for various timeout indicators
+    timeout_indicators = [
+        "timeout",
+        "timed out",
+        "timeouterror",
+        "urlerror",  # URLError often indicates timeout
+        "read timeout",
+        "connection timeout",
+    ]
+    return any(indicator in error_msg for indicator in timeout_indicators)
 
 
 def run_pipeline(
@@ -371,11 +380,14 @@ def _run_single_csv(
 
                     except LLMConnectionError as llm_exc:
                         last_error = llm_exc
+                        # Log the error for debugging
+                        _log(on_log, f"LLM Fehler: {llm_exc}")
                         # Only retry if it's a timeout error and we have retries left
                         if _is_timeout_error(llm_exc) and attempt < max_retries:
-                            _log(on_log, f"Timeout erkannt: {llm_exc}")
+                            _log(on_log, f"→ Timeout erkannt, wiederhole in {retry_delay}s...")
                             continue
                         # Either not a timeout or no more retries - re-raise
+                        _log(on_log, f"→ Nicht wiederholbar (Timeout={_is_timeout_error(llm_exc)}, Versuche übrig={attempt < max_retries})")
                         raise
                     except Exception as exc:
                         _log(on_log, f"Unexpected error during summary: {exc}")
