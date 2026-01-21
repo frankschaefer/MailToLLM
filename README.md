@@ -38,9 +38,10 @@ To prevent "context overflow" errors when the model's context window is too smal
 
 ### Error Recovery
 The pipeline includes automatic error recovery for LLM failures:
+- **Timeout errors**: Automatically retried up to 2 times (3 total attempts) with 2-second delays
 - **Transient errors** (HTTP 500, connection failures): Records are automatically reprocessed on next run
 - **Context overflow errors**: Not reprocessed (would fail again); increase context limit or truncation is applied
-- **Critical failures**: Pipeline pauses with clear error message, can be resumed after fixing the issue
+- **Critical failures**: After all retries exhausted, pipeline pauses with clear error message and can be resumed
 
 ## Contact Management
 The pipeline automatically extracts and manages contacts from emails:

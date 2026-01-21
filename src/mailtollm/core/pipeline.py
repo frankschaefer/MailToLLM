@@ -56,6 +56,12 @@ def _save_contacts(contact_manager: ContactManager, path: Path, on_log: LogCallb
             _log(on_log, f"Total unique contacts: {len(sorted_contacts)}")
 
 
+def _is_timeout_error(exc: LLMConnectionError) -> bool:
+    """Check if an LLMConnectionError is a timeout that should be retried."""
+    error_msg = str(exc).lower()
+    return "timeout" in error_msg or "timed out" in error_msg
+
+
 def run_pipeline(
     csv_path: Path,
     attachments_root: Path,
@@ -304,36 +310,56 @@ def _run_single_csv(
         summary_text = ""
         if summary_length and summary_length > 0:
             if llm_available:
-                try:
-                    (summary_text, summary_warning), summary_elapsed = _time_call(
-                        lambda: summarize_text(
-                            combined_context,
-                            summary_length,
-                            file_ext=".email",
-                            on_log=on_log,
-                            detail_logging=detail_logging,
-                        )
-                    )
-                    if detail_logging:
-                        _log(
-                            on_log,
-                            f"Timing summary ({record['id']}): {summary_elapsed:.2f}s",
-                        )
-                    if summary_warning:
-                        summary_warning.attachment_id = record["id"]
-                        warnings.append(summary_warning)
-                        # Check if this is a connection error
-                        if _is_llm_connection_error(summary_warning):
-                            raise LLMConnectionError(
-                                f"LLM connection lost: {summary_warning.details}"
+                # Retry logic for timeout errors (max 2 retries = 3 total attempts)
+                max_retries = 2
+                retry_delay = 2.0  # seconds
+                last_error = None
+
+                for attempt in range(max_retries + 1):
+                    try:
+                        if attempt > 0:
+                            _log(on_log, f"Wiederhole LLM-Anfrage (Versuch {attempt + 1}/{max_retries + 1})...")
+                            time.sleep(retry_delay)
+
+                        (summary_text, summary_warning), summary_elapsed = _time_call(
+                            lambda: summarize_text(
+                                combined_context,
+                                summary_length,
+                                file_ext=".email",
+                                on_log=on_log,
+                                detail_logging=detail_logging,
                             )
-                    else:
-                        _log(on_log, f"Summary preview: {_preview(summary_text)}")
-                except LLMConnectionError:
-                    raise
-                except Exception as exc:
-                    _log(on_log, f"Unexpected error during summary: {exc}")
-                    raise LLMConnectionError(f"LLM processing failed: {exc}")
+                        )
+                        if detail_logging:
+                            _log(
+                                on_log,
+                                f"Timing summary ({record['id']}): {summary_elapsed:.2f}s",
+                            )
+                        if summary_warning:
+                            summary_warning.attachment_id = record["id"]
+                            warnings.append(summary_warning)
+                            # Check if this is a connection error
+                            if _is_llm_connection_error(summary_warning):
+                                raise LLMConnectionError(
+                                    f"LLM connection lost: {summary_warning.details}"
+                                )
+                        else:
+                            _log(on_log, f"Summary preview: {_preview(summary_text)}")
+
+                        # Success - break out of retry loop
+                        break
+
+                    except LLMConnectionError as llm_exc:
+                        last_error = llm_exc
+                        # Only retry if it's a timeout error and we have retries left
+                        if _is_timeout_error(llm_exc) and attempt < max_retries:
+                            _log(on_log, f"Timeout erkannt: {llm_exc}")
+                            continue
+                        # Either not a timeout or no more retries - re-raise
+                        raise
+                    except Exception as exc:
+                        _log(on_log, f"Unexpected error during summary: {exc}")
+                        raise LLMConnectionError(f"LLM processing failed: {exc}")
             else:
                 warnings.append(
                     WarningRecord(
