@@ -1,5 +1,7 @@
 # MailToLLM
 
+**Version: 1.0.0** | **Release Date: 2026-01-21**
+
 Python UI app (CustomTkinter) for reading email CSV files and their attachments, then producing LLM-ready structured outputs.
 
 ## Goals
@@ -77,6 +79,21 @@ The system supports multiple email formats:
 - The `contacts_outlook.csv` file is updated **after each processed email**
 - This ensures that the contact file is always up-to-date, even during long-running processing sessions
 - If you open the file during processing, you'll see the latest contacts immediately
+
+## Versioning
+
+This project follows [Semantic Versioning](https://semver.org/):
+- **MAJOR.MINOR.PATCH** (e.g., 1.0.0)
+- **MAJOR**: Incompatible API changes
+- **MINOR**: New features (backwards-compatible)
+- **PATCH**: Bug fixes (backwards-compatible)
+
+Version information is displayed:
+- In the UI window title: `MailToLLM v1.0.0`
+- In the UI header (top-right corner): `v1.0.0` and date
+- In the log at pipeline start
+
+See `CHANGELOG.md` for detailed version history and changes.
 
 ## Folder notes
 - `data/raw` contains CSVs and source folders.

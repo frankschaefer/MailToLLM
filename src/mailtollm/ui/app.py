@@ -9,6 +9,7 @@ from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
 
+from mailtollm.__version__ import __version__, __version_date__
 from mailtollm.core.pipeline import run_pipeline
 
 
@@ -18,7 +19,7 @@ class MailToLLMApp(ctk.CTk):
 
         ctk.set_appearance_mode("light")
 
-        self.title("MailToLLM")
+        self.title(f"MailToLLM v{__version__}")
         self.geometry("980x680")
         self.minsize(920, 620)
 
@@ -67,6 +68,23 @@ class MailToLLMApp(ctk.CTk):
             font=("Helvetica", 14),
         )
         subtitle.grid(row=1, column=0, padx=16, pady=(0, 14), sticky="w")
+
+        # Version info in header (right side)
+        version_label = ctk.CTkLabel(
+            header,
+            text=f"v{__version__}",
+            text_color="#ffffff",
+            font=("Helvetica", 12, "bold"),
+        )
+        version_label.grid(row=0, column=1, padx=16, pady=(14, 0), sticky="e")
+
+        version_date_label = ctk.CTkLabel(
+            header,
+            text=__version_date__,
+            text_color="#d7deef",
+            font=("Helvetica", 11),
+        )
+        version_date_label.grid(row=1, column=1, padx=16, pady=(0, 14), sticky="e")
 
         input_frame = ctk.CTkFrame(self, fg_color="#ffffff", corner_radius=14)
         input_frame.grid(row=1, column=0, padx=20, pady=(0, 16), sticky="ew")
@@ -300,6 +318,9 @@ class MailToLLMApp(ctk.CTk):
         self._total_records = 0
         self._processed_records = 0
         self._set_controls(running=True)
+        self._enqueue_log("=" * 80)
+        self._enqueue_log(f"MailToLLM v{__version__} ({__version_date__})")
+        self._enqueue_log("=" * 80)
         self._enqueue_log("Starting pipeline...")
 
         self._worker = threading.Thread(

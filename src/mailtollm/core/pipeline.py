@@ -8,6 +8,7 @@ from pathlib import Path
 from threading import Event
 from typing import Callable
 
+from mailtollm.__version__ import __version__, __version_date__
 from mailtollm.io.attachment_resolver import resolve_attachment_paths
 from mailtollm.io.csv_reader import read_email_csv
 from mailtollm.io.output_writer import read_output_json, write_output_json
