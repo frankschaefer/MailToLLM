@@ -578,32 +578,40 @@ def _build_context(email: EmailRecord, attachments: list[AttachmentContent]) -> 
     return "\n\n".join(part for part in parts if part.strip())
 
 
-def _extract_email_from_field(field: str) -> str | None:
-    """Extract email address from various formats.
+def _extract_email_and_name_from_field(field: str) -> tuple[str | None, str | None]:
+    """Extract email address and name from various formats.
 
     Supports:
-    - Plain email: 'alice@example.com'
-    - Name with email: 'Alice Smith <alice@example.com>'
-    - Name only: 'Alice Smith' -> returns None (not a valid email)
+    - Plain email: 'alice@example.com' -> (email, None)
+    - Name with email: 'Alice Smith <alice@example.com>' -> (email, 'Alice Smith')
+    - Name only: 'Alice Smith' -> (None, None)
 
-    Returns the email address or None if no valid email found.
+    Returns (email, name) tuple. Both can be None.
     """
     if not field:
-        return None
+        return (None, None)
 
     field = field.strip()
 
     # Check for "Name <email>" format
-    match = re.search(r'<([^>]+@[^>]+)>', field)
+    match = re.search(r'^(.+?)\s*<([^>]+@[^>]+)>$', field)
     if match:
-        return match.group(1).strip()
+        name = match.group(1).strip()
+        email = match.group(2).strip()
+        return (email, name)
 
     # Check if it's a plain email (contains @)
     if '@' in field and ' ' not in field:
-        return field
+        return (field, None)
 
     # It's just a name, no email
-    return None
+    return (None, None)
+
+
+def _extract_email_from_field(field: str) -> str | None:
+    """Extract email address from various formats (backward compatibility)."""
+    email, _ = _extract_email_and_name_from_field(field)
+    return email
 
 
 def _entities_to_contacts(source_id: str, entities: EntityIndex, email_record: EmailRecord) -> list[ContactExportRecord]:
@@ -611,12 +619,13 @@ def _entities_to_contacts(source_id: str, entities: EntityIndex, email_record: E
     processed_emails: set[str] = set()
 
     # Add sender contact
-    sender_email = _extract_email_from_field(email_record.sender)
+    sender_email, sender_name = _extract_email_and_name_from_field(email_record.sender)
     if sender_email:
         contacts.append(
             ContactExportRecord(
                 source=source_id,
                 email=sender_email,
+                name=sender_name,
                 organization=entities.organizations[0] if entities.organizations else None,
                 notes="Email sender",
             )
@@ -625,12 +634,13 @@ def _entities_to_contacts(source_id: str, entities: EntityIndex, email_record: E
 
     # Add recipient contacts
     for recipient in email_record.recipients:
-        recipient_email = _extract_email_from_field(recipient)
+        recipient_email, recipient_name = _extract_email_and_name_from_field(recipient)
         if recipient_email and recipient_email.lower() not in processed_emails:
             contacts.append(
                 ContactExportRecord(
                     source=source_id,
                     email=recipient_email,
+                    name=recipient_name,
                     organization=entities.organizations[0] if entities.organizations else None,
                     notes="Email recipient",
                 )

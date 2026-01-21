@@ -4,7 +4,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from mailtollm.models.schema import EmailRecord, EntityIndex
-from mailtollm.core.pipeline import _entities_to_contacts, _extract_email_from_field
+from mailtollm.core.pipeline import (
+    _entities_to_contacts,
+    _extract_email_from_field,
+    _extract_email_and_name_from_field,
+)
 
 
 def test_extract_email_from_plain_email() -> None:
@@ -30,6 +34,31 @@ def test_extract_email_from_empty() -> None:
     assert _extract_email_from_field("") is None
     assert _extract_email_from_field(None) is None
     assert _extract_email_from_field("   ") is None
+
+
+def test_extract_email_and_name_from_name_email_format() -> None:
+    """Test extraction of both name and email from 'Name <email>' format."""
+    email, name = _extract_email_and_name_from_field("Alice Smith <alice@example.com>")
+    assert email == "alice@example.com"
+    assert name == "Alice Smith"
+
+    email, name = _extract_email_and_name_from_field("Bob Jones <bob@test.com>")
+    assert email == "bob@test.com"
+    assert name == "Bob Jones"
+
+
+def test_extract_email_and_name_from_plain_email() -> None:
+    """Test that plain email returns no name."""
+    email, name = _extract_email_and_name_from_field("alice@example.com")
+    assert email == "alice@example.com"
+    assert name is None
+
+
+def test_extract_email_and_name_from_name_only() -> None:
+    """Test that name-only returns no email or name."""
+    email, name = _extract_email_and_name_from_field("Alice Smith")
+    assert email is None
+    assert name is None
 
 
 def test_contact_extraction_from_email_with_multiple_recipients() -> None:
@@ -72,7 +101,7 @@ def test_contact_extraction_from_email_with_multiple_recipients() -> None:
 
 
 def test_contact_extraction_with_name_address_format() -> None:
-    """Test extraction when recipients have name + email format."""
+    """Test extraction when recipients have name + email format - including NAMES."""
     email = EmailRecord(
         id="email-2",
         subject="Test",
@@ -88,14 +117,18 @@ def test_contact_extraction_with_name_address_format() -> None:
     entities = EntityIndex()
     contacts = _entities_to_contacts("email-2", entities, email)
 
-    # Should extract email addresses from "Name <email>" format
+    # Should extract 3 contacts with BOTH emails AND names
     assert len(contacts) == 3
 
-    # Check that email addresses were extracted
-    emails = [c.email for c in contacts]
-    assert "alice@example.com" in emails or "Alice Smith <alice@example.com>" in emails
-    assert "bob@example.com" in emails or "Bob Jones <bob@example.com>" in emails
-    assert "carol@example.com" in emails or "Carol White <carol@example.com>" in emails
+    # Check that email addresses AND names were extracted
+    emails_and_names = [(c.email, c.name) for c in contacts]
+
+    # Sender should have name extracted
+    assert ("alice@example.com", "Alice Smith") in emails_and_names
+
+    # Recipients should have names extracted
+    assert ("bob@example.com", "Bob Jones") in emails_and_names
+    assert ("carol@example.com", "Carol White") in emails_and_names
 
 
 def test_contact_extraction_deduplicates_sender_and_recipient() -> None:
