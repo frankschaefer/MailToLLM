@@ -73,6 +73,11 @@ The system supports multiple email formats:
   - `Contact duplicate (no new info): bob@example.com`
   - `Contact updated: carol@example.com - added phone '+49 123', updated name from 'Carol' to 'Carol White'`
 
+### Contact File Updates
+- The `contacts_outlook.csv` file is updated **after each processed email**
+- This ensures that the contact file is always up-to-date, even during long-running processing sessions
+- If you open the file during processing, you'll see the latest contacts immediately
+
 ## Folder notes
 - `data/raw` contains CSVs and source folders.
 - `data/processed` contains normalized intermediate files.

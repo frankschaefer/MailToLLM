@@ -150,6 +150,7 @@ def run_pipeline(
                     detail_logging,
                     regenerate_summaries,
                     contact_manager,
+                    global_contacts_path,
                 )
             )
             # Save contacts after each CSV file to preserve progress (silently)
@@ -201,6 +202,7 @@ def _run_single_csv(
     detail_logging: bool,
     regenerate_summaries: bool,
     contact_manager: ContactManager,
+    global_contacts_path: Path | None = None,
 ) -> list[LLMOutput]:
     output_dir.mkdir(parents=True, exist_ok=True)
     records = read_email_csv(csv_path, id_prefix=csv_path.stem)
@@ -391,6 +393,11 @@ def _run_single_csv(
         if detail_logging:
             _log(on_log, f"Timing write output ({record['id']}): {write_elapsed:.2f}s")
         outputs.append(output)
+
+        # Save contacts after each email to ensure file is always up-to-date
+        if global_contacts_path:
+            _save_contacts(contact_manager, global_contacts_path, on_log, verbose=False)
+
         if on_progress:
             # Count: 1 email and actual number of attachments
             num_attachments = len(attachment_paths)
