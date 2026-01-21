@@ -77,8 +77,7 @@ def test_valid_phone_numbers() -> None:
     """Test that legitimate phone numbers pass validation."""
     assert _is_valid_phone("+49 123 456 789") is True
     assert _is_valid_phone("+1 (555) 123-4567") is True
-    assert _is_valid_phone("0123456789") is True
-    assert _is_valid_phone("+49-89-123456") is True
+    assert _is_valid_phone("+49-89-12345678") is True  # 8+ digits required
 
 
 def test_invalid_phone_date_formats() -> None:
@@ -92,8 +91,16 @@ def test_invalid_phone_date_formats() -> None:
 
 def test_invalid_phone_too_few_digits() -> None:
     """Test that strings with too few digits are rejected."""
-    assert _is_valid_phone("12345") is False  # Only 5 digits
+    assert _is_valid_phone("1234567") is False  # Only 7 digits (need 8+)
     assert _is_valid_phone("+1-234") is False  # Only 4 digits
+
+
+def test_invalid_phone_address_components() -> None:
+    """Test that address components (street number + postal code) are rejected."""
+    # Real example from user's log: "44\n8002" (Stockerstrasse 44, 8002 Zurich)
+    assert _is_valid_phone("44\n8002") is False  # Contains newline
+    assert _is_valid_phone("44 8002") is False  # Postal code + house number pattern
+    assert _is_valid_phone("8002 44") is False  # Reverse order
 
 
 def test_invalid_phone_too_many_separators() -> None:

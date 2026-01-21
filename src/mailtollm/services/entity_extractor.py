@@ -7,8 +7,17 @@ from mailtollm.models.schema import EntityIndex
 # Email regex - basic pattern
 EMAIL_RE = re.compile(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", re.IGNORECASE)
 
-# Phone regex - must start with + or digit, contain enough digits
-PHONE_RE = re.compile(r"\+?\d[\d\s().-]{6,}\d")
+# Phone regex - more restrictive pattern for actual phone numbers
+# Matches international format (+XX), country code (00XX), or local with area code
+# Requires: 8-15 digits total, no newlines, limited separators
+PHONE_PATTERNS = [
+    # International format: +41 44 123 45 67, +1-555-123-4567
+    re.compile(r"\+\d{1,3}[\s.-]?\(?\d{1,4}\)?[\s.-]?\d{1,4}[\s.-]?\d{1,4}[\s.-]?\d{1,4}"),
+    # Country code format: 0041 44 123 45 67
+    re.compile(r"00\d{1,3}[\s.-]?\(?\d{1,4}\)?[\s.-]?\d{1,4}[\s.-]?\d{1,4}[\s.-]?\d{1,4}"),
+    # Local with area code: (044) 123 45 67, 044-1234567, 044/123 45 67
+    re.compile(r"\(?\d{2,5}\)?[\s./-]\d{3,4}[\s./-]?\d{2,4}[\s./-]?\d{0,4}"),
+]
 
 # Date patterns to exclude from phone numbers
 DATE_PATTERNS = [
@@ -80,29 +89,55 @@ def _is_valid_phone(phone: str) -> bool:
 
     Filters out:
     - Date formats (DD.MM.YYYY, DD/MM/YYYY, etc.)
-    - Strings with too few digits
+    - Address components (street numbers, postal codes)
+    - Strings with too few or too many digits
+    - Strings with newlines (street addresses split across lines)
     """
+    phone = phone.strip()
+
+    # Reject if contains newline (address split across lines)
+    if '\n' in phone or '\r' in phone:
+        return False
+
     # Check if it matches any date pattern
     for date_pattern in DATE_PATTERNS:
-        if date_pattern.fullmatch(phone.strip()):
+        if date_pattern.fullmatch(phone):
             return False
 
-    # Must contain at least 6 digits (minimum valid phone number)
+    # Count digits only
     digit_count = sum(c.isdigit() for c in phone)
-    if digit_count < 6:
+
+    # Phone numbers typically have 8-15 digits (international standard)
+    # Too few: likely partial number or address component
+    # Too many: likely multiple numbers or other data
+    if digit_count < 8 or digit_count > 15:
         return False
 
     # Must not be mostly dots/slashes (date-like)
     separator_count = phone.count('.') + phone.count('/') + phone.count('-')
-    if separator_count > 2:  # More than 2 separators suggests date format
+    if separator_count > 3:  # More than 3 separators is unusual for phone numbers
+        return False
+
+    # Reject if looks like postal code + house number pattern
+    # Example: "8002 44" or "44 8002" (4-5 digits, space, 2-3 digits)
+    if re.match(r'^\d{2,3}\s+\d{4,5}$', phone) or re.match(r'^\d{4,5}\s+\d{2,3}$', phone):
         return False
 
     return True
 
 
 def _extract_and_validate_phones(text: str) -> list[str]:
-    """Extract and validate phone numbers from text."""
-    raw_phones = PHONE_RE.findall(text)
+    """Extract and validate phone numbers from text.
+
+    Uses multiple regex patterns to match different phone number formats.
+    """
+    raw_phones: list[str] = []
+
+    # Try all phone patterns
+    for pattern in PHONE_PATTERNS:
+        raw_phones.extend(pattern.findall(text))
+
+    # Validate and deduplicate
     valid_phones = [phone for phone in raw_phones if _is_valid_phone(phone)]
     return sorted(set(valid_phones))
 
