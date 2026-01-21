@@ -27,6 +27,7 @@ name `local-model`. Override via environment variables:
 - `LLM_STUDIO_URL` - The URL of your LLM Studio API endpoint
 - `LLM_STUDIO_MODEL` - The model name to use
 - `LLM_MAX_CONTEXT_CHARS` - Maximum characters for input text (default: 12000, ~3000 tokens)
+- `LLM_TIMEOUT` - Request timeout in seconds (default: 300 = 5 minutes)
 
 ### Context Window Management
 To prevent "context overflow" errors when the model's context window is too small:
@@ -37,6 +38,14 @@ To prevent "context overflow" errors when the model's context window is too smal
   - 8K context models: use 28000
   - 16K context models: use 60000
   - 32K+ context models: use 120000 or higher
+
+### Timeout Configuration
+If you experience timeout errors during processing:
+- **Default timeout**: 300 seconds (5 minutes) per LLM request
+- **Increase timeout**: Set `LLM_TIMEOUT` environment variable (in seconds)
+  - Example: `export LLM_TIMEOUT=600` for 10 minutes
+  - Slow machines or large contexts may need longer timeouts
+- **Reduce timeout**: Set lower value if LLM is fast and you want quick failure detection
 
 ### Error Recovery
 The pipeline includes automatic error recovery for LLM failures:

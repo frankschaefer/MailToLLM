@@ -13,6 +13,7 @@ from mailtollm.models.schema import WarningRecord
 DEFAULT_URL = "http://localhost:1234/v1/chat/completions"
 DEFAULT_MODEL = "local-model"
 DEFAULT_MAX_CONTEXT_CHARS = 12000  # ~3000 tokens for input (leaving room for prompt + response)
+DEFAULT_TIMEOUT = 300  # 5 minutes - LLM responses can be slow
 LogCallback = Callable[[str], None]
 
 
@@ -95,6 +96,7 @@ def summarize_text(
     url = os.environ.get("LLM_STUDIO_URL", DEFAULT_URL)
     model = os.environ.get("LLM_STUDIO_MODEL", DEFAULT_MODEL)
     max_context_chars = int(os.environ.get("LLM_MAX_CONTEXT_CHARS", str(DEFAULT_MAX_CONTEXT_CHARS)))
+    timeout = int(os.environ.get("LLM_TIMEOUT", str(DEFAULT_TIMEOUT)))
 
     check_start = time.perf_counter()
     available, detail = check_llm_available(url)
@@ -148,7 +150,7 @@ def summarize_text(
             headers={"Content-Type": "application/json"},
         )
         request_start = time.perf_counter()
-        with urlopen(request, timeout=60) as response:
+        with urlopen(request, timeout=timeout) as response:
             raw = response.read()
         request_elapsed = time.perf_counter() - request_start
 
