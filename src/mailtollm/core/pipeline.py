@@ -315,7 +315,7 @@ def _run_single_csv(
             _log(on_log, f"Timing entity extract ({record['id']}): {entity_elapsed:.2f}s")
         contacts_for_email = _entities_to_contacts(record["id"], entities, email)
         contact_manager.add_contacts(contacts_for_email)
-        _log_entity_summary(on_log, record["id"], entities, contacts_for_email, detail_logging)
+        _log_entity_summary(on_log, record["id"], entities, contacts_for_email, detail_logging, email)
 
         summary_text = ""
         if summary_length and summary_length > 0:
@@ -536,6 +536,7 @@ def _log_entity_summary(
     entities: EntityIndex,
     contacts: list[ContactExportRecord],
     detail_logging: bool,
+    email_record: EmailRecord | None = None,
 ) -> None:
     _log(
         on_log,
@@ -546,6 +547,13 @@ def _log_entity_summary(
             f"contacts={len(contacts)}"
         ),
     )
+
+    # Always log sender/recipients info when no contacts are found (debugging)
+    if len(contacts) == 0 and email_record:
+        sender_info = f"sender='{email_record.sender[:50]}...'" if len(email_record.sender) > 50 else f"sender='{email_record.sender}'"
+        recipients_info = f"recipients={len(email_record.recipients)}"
+        _log(on_log, f"No contacts extracted! {sender_info}, {recipients_info}")
+
     if not detail_logging:
         return
 
@@ -648,6 +656,8 @@ def _entities_to_contacts(source_id: str, entities: EntityIndex, email_record: E
             )
         )
         processed_emails.add(sender_email.lower())
+    # Debug: If no sender email was extracted, it means the field was empty or invalid
+    # This will be caught by _log_entity_summary showing sender field content
 
     # Add recipient contacts
     for recipient in email_record.recipients:
