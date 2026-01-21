@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
-from mailtollm.core.pipeline import run_pipeline
+from mailtollm.core.pipeline import run_pipeline, _is_record_worth_processing
 
 
 def test_run_pipeline_creates_outputs(tmp_path: Path) -> None:
@@ -146,3 +146,75 @@ def test_run_pipeline_regenerate_summary(tmp_path: Path) -> None:
     assert outputs == []
     updated = json.loads((output_dir / "email-5.json").read_text(encoding="utf-8"))
     assert updated["summary_text"] == "sum"
+
+
+def test_is_record_worth_processing_with_contacts() -> None:
+    """Test that records with sender/recipients are processed."""
+    record = {
+        "sender": "alice@example.com",
+        "recipients": ["bob@example.com"],
+        "body_text": "",
+        "body_html": "",
+        "attachment_names": [],
+    }
+    assert _is_record_worth_processing(record) is True
+
+
+def test_is_record_worth_processing_with_attachments() -> None:
+    """Test that records with attachments are processed."""
+    record = {
+        "sender": "",
+        "recipients": [],
+        "body_text": "",
+        "body_html": "",
+        "attachment_names": ["document.pdf"],
+    }
+    assert _is_record_worth_processing(record) is True
+
+
+def test_is_record_worth_processing_with_substantial_content() -> None:
+    """Test that records with substantial body text are processed."""
+    record = {
+        "sender": "",
+        "recipients": [],
+        "body_text": "This is a long email body with more than 50 characters of text content.",
+        "body_html": "",
+        "attachment_names": [],
+    }
+    assert _is_record_worth_processing(record) is True
+
+
+def test_is_record_worth_processing_with_html_content() -> None:
+    """Test that records with substantial HTML content are processed."""
+    record = {
+        "sender": "",
+        "recipients": [],
+        "body_text": "",
+        "body_html": "<html><body>" + ("x" * 100) + "</body></html>",
+        "attachment_names": [],
+    }
+    assert _is_record_worth_processing(record) is True
+
+
+def test_is_record_worth_processing_empty_calendar_entry() -> None:
+    """Test that empty calendar entries are skipped."""
+    record = {
+        "sender": "",
+        "recipients": [],
+        "body_text": "FYI Tobias' time slot for interviews",
+        "body_html": "",
+        "attachment_names": [],
+    }
+    assert _is_record_worth_processing(record) is False
+
+
+def test_is_record_worth_processing_all_empty() -> None:
+    """Test that completely empty records are skipped."""
+    record = {
+        "sender": "",
+        "recipients": [],
+        "body_text": "",
+        "body_html": "",
+        "attachment_names": [],
+    }
+    assert _is_record_worth_processing(record) is False

@@ -220,6 +220,15 @@ def _run_single_csv(
         output_path = output_dir / f"{record['id']}.json"
         should_reprocess = False
 
+        # Check if record is worth processing (skip empty calendar entries, etc.)
+        if not output_path.exists() and not _is_record_worth_processing(record):
+            _log(on_log, f"Skipping {record['id']} (no contacts, attachments, or substantial content)")
+            if on_progress:
+                # Still count it in progress
+                num_attachments = len(record.get("attachment_names", []))
+                on_progress(1, num_attachments)
+            continue
+
         if output_path.exists():
             # Check if record needs reprocessing due to LLM errors
             should_reprocess = _should_reprocess_record(output_path, on_log)
@@ -690,6 +699,31 @@ def _entities_to_contacts(source_id: str, entities: EntityIndex, email_record: E
             processed_emails.add(email.lower())
 
     return contacts
+
+
+def _is_record_worth_processing(record: dict) -> bool:
+    """Check if a record contains useful information worth processing.
+
+    Skip records that have:
+    - No sender/recipients (empty contact fields)
+    - No attachments
+    - Very short body text (< 50 chars) - likely just calendar entries
+
+    Returns True if record should be processed, False if it should be skipped.
+    """
+    # Check for sender or recipients
+    has_contacts = bool(record.get("sender", "").strip()) or bool(record.get("recipients"))
+
+    # Check for attachments
+    has_attachments = bool(record.get("attachment_names"))
+
+    # Check for substantial body content
+    body_text = record.get("body_text", "").strip()
+    body_html = record.get("body_html", "").strip()
+    has_content = len(body_text) >= 50 or len(body_html) >= 100
+
+    # Process if any of these conditions are met
+    return has_contacts or has_attachments or has_content
 
 
 def _should_reprocess_record(output_path: Path, on_log: LogCallback | None) -> bool:
