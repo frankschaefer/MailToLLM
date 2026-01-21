@@ -5,6 +5,24 @@ All notable changes to MailToLLM will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2026-01-21
+
+### Fixed
+- Organization extraction now limits to 2-5 words before legal suffix (prevents matching entire email bodies)
+- Organization extraction filters out false positives: job titles, email subjects, greetings, proposals
+- Organization extraction skips suspiciously long matches (>60 characters)
+- LLM timeout increased from 60 seconds to 300 seconds (5 minutes) to prevent frequent timeouts
+- Timeout retry detection improved to handle URLError and various timeout error formats
+
+### Added
+- `LLM_TIMEOUT` environment variable for configurable timeout (default: 300 seconds)
+- Comprehensive tests for organization extraction edge cases
+- Debug logging for retry decisions (shows why retries succeed or fail)
+
+### Changed
+- Default LLM request timeout: 60s → 300s
+- Organization regex now more restrictive to prevent false positives
+
 ## [1.0.0] - 2026-01-21
 
 ### Added

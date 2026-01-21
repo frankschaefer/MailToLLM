@@ -61,3 +61,86 @@ def test_extract_organization_preserves_complex_names() -> None:
     text = "Smith & Partners GmbH is our legal advisor."
     orgs = _extract_organizations(text)
     assert "Smith & Partners GmbH" in orgs
+
+
+def test_reject_long_email_body_text_before_org() -> None:
+    """Test that long email body text before GmbH is rejected (real bug example 1)."""
+    text = """KORTEQ- internal alignment
+
+Hi Frank,
+
+Since we retook the KORTEQ proposal, we wanted to meet and align together with KIT next tuesday, here is the invite.
+
+Best,
+Ignacio
+
+
+------------------------------------
+Ignacio Robles López
+
+Deeplight GmbH"""
+    orgs = _extract_organizations(text)
+
+    # Should extract only "Deeplight GmbH", not the entire email body
+    assert "Deeplight GmbH" in orgs
+    assert not any("KORTEQ" in org and "Deeplight GmbH" in org for org in orgs)
+    assert not any("internal alignment" in org.lower() for org in orgs)
+    assert not any(len(org) > 60 for org in orgs)  # No suspiciously long org names
+
+
+def test_reject_email_subject_and_body_before_org() -> None:
+    """Test that email subject/body before GmbH is rejected (real bug example 2)."""
+    text = """About Invest BW sprint project proposal
+
+Dear everyone,
+
+Please find the draft of the project proposal attached to this email.
+
+Best,
+Ignacio
+
+--
+Ignacio Robles López
+
+Deeplight GmbH"""
+    orgs = _extract_organizations(text)
+
+    # Should extract only "Deeplight GmbH"
+    assert "Deeplight GmbH" in orgs
+    assert not any("About" in org for org in orgs)
+    assert not any("proposal" in org.lower() for org in orgs)
+
+
+def test_reject_job_title_before_org() -> None:
+    """Test that job titles before GmbH are rejected (real bug example 3)."""
+    text = "Photonics Design Engineer Position - DLT GmbH"
+    orgs = _extract_organizations(text)
+
+    # Should extract "DLT GmbH" only, not the full job title
+    # Or skip entirely if it contains "position"
+    if orgs:
+        assert all("Position" not in org for org in orgs)
+        assert all(len(org) < 30 for org in orgs)
+
+
+def test_extract_valid_short_org_names() -> None:
+    """Test that valid short organization names are extracted correctly."""
+    text = "Contact Optimus Search GmbH for more information."
+    orgs = _extract_organizations(text)
+    assert "Optimus Search GmbH" in orgs
+
+
+def test_extract_org_from_signature() -> None:
+    """Test extracting organization from email signature."""
+    text = """Best regards,
+
+John Doe
+Senior Engineer
+
+Deeplight GmbH
+Example Street 123
+12345 City"""
+    orgs = _extract_organizations(text)
+    assert "Deeplight GmbH" in orgs
+    # Should not include the job title
+    assert not any("Engineer" in org for org in orgs)

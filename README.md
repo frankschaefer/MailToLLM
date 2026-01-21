@@ -1,6 +1,6 @@
 # MailToLLM
 
-**Version: 1.0.0** | **Release Date: 2026-01-21**
+**Version: 1.0.1** | **Release Date: 2026-01-21**
 
 Python UI app (CustomTkinter) for reading email CSV files and their attachments, then producing LLM-ready structured outputs.
 

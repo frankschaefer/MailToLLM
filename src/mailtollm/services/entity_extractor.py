@@ -146,13 +146,40 @@ def _extract_organizations(text: str) -> list[str]:
     """Extract organization names from text.
 
     Filters out common patterns that are not organizations:
-    - Titles/positions before organization (e.g., "CEO, Deeplight GmbH" -> "Deeplight GmbH")
+    - Limits to 2-5 words before legal suffix (prevents matching long text)
+    - Removes titles/positions before organization (e.g., "CEO, Deeplight GmbH" -> "Deeplight GmbH")
+    - Filters out common false positives (job titles, email subjects)
     """
     matches: set[str] = set()
     for suffix in ORG_SUFFIXES:
-        pattern = re.compile(rf"\b([A-Z][\w&.,\s-]+\s{suffix})\b", re.IGNORECASE)
+        # Match 1-5 capitalized words before the legal suffix
+        # This prevents matching entire paragraphs
+        pattern = re.compile(
+            rf"\b([A-Z][\w&]*(?:\s+(?:&\s+)?[A-Z][\w&]*){'{0,4}'})\s+{suffix}\b",
+            re.IGNORECASE
+        )
         for match in pattern.finditer(text):
-            org = match.group(1).strip()
+            org = match.group(0).strip()
+
+            # Skip if organization name is suspiciously long (>60 chars = likely not a company name)
+            if len(org) > 60:
+                continue
+
+            # Skip common false positive patterns
+            org_lower = org.lower()
+            false_positive_keywords = [
+                'position',      # "Engineer Position - Company GmbH"
+                'about',         # "About Project - Company GmbH"
+                'subject:',      # Email subject lines
+                'hi ',           # Email greetings
+                'dear ',         # Email greetings
+                'best,',         # Email closings
+                'regards,',      # Email closings
+                'proposal',      # "Project Proposal - Company GmbH"
+                'alignment',     # "Internal Alignment - Company GmbH"
+            ]
+            if any(keyword in org_lower for keyword in false_positive_keywords):
+                continue
 
             # Remove common title/position prefixes (e.g., "CEO, Company" -> "Company")
             # Look for pattern: "Title, Organization" or "Title - Organization"
@@ -163,10 +190,14 @@ def _extract_organizations(text: str) -> list[str]:
                     first_part = parts[0].lower()
                     # Common titles to skip
                     title_keywords = ['ceo', 'cto', 'cfo', 'director', 'manager', 'president',
-                                     'founder', 'owner', 'partner', 'lead', 'head']
+                                     'founder', 'owner', 'partner', 'lead', 'head', 'engineer']
                     if any(keyword in first_part for keyword in title_keywords):
                         # Use the part after the comma/dash
                         org = ', '.join(parts[1:]).strip()
+
+            # Final validation: must contain the legal suffix
+            if not any(org.lower().endswith(suf.lower()) for suf in ORG_SUFFIXES):
+                continue
 
             matches.add(org)
 
