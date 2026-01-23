@@ -26,7 +26,7 @@ DATE_PATTERNS = [
     re.compile(r"\d{2,4}-\d{1,2}-\d{1,2}"),     # YYYY-MM-DD
 ]
 
-ORG_SUFFIXES = ["gmbh", "ag", "inc", "llc", "ltd", "kg", "gbr", "ug", "plc"]
+ORG_SUFFIXES = ["gmbh", "ag", "inc", "llc", "ltd", "kg", "gbr", "ug", "plc", "sa", "sas", "sarl"]
 
 
 def extract_entities(text: str) -> EntityIndex:
@@ -142,6 +142,46 @@ def _extract_and_validate_phones(text: str) -> list[str]:
     return sorted(set(valid_phones))
 
 
+def _clean_organization_name(org: str) -> str:
+    """Clean organization name by removing prepositional phrases and keeping only the core name.
+
+    Examples:
+    - "the regulatory pathway for Deeplight GmbH" -> "Deeplight GmbH"
+    - "Proposal About Innovation AG" -> "Innovation AG"
+    - "Deeplight GmbH" -> "Deeplight GmbH" (unchanged)
+
+    Returns empty string if no valid organization name can be extracted.
+    """
+    if not org:
+        return ""
+
+    # Split by common prepositions and take the last part (usually contains the actual org name)
+    prepositions = [' for ', ' about ', ' at ', ' with ', ' from ', ' to ']
+    for prep in prepositions:
+        if prep in org.lower():
+            # Take the part after the last preposition
+            parts = re.split(prep, org, flags=re.IGNORECASE)
+            org = parts[-1].strip()
+
+    # Remove leading articles (the, a, an)
+    org = re.sub(r'^\s*(the|a|an)\s+', '', org, flags=re.IGNORECASE)
+
+    # Extract the core organization name: look for pattern of 1-5 capitalized words + legal suffix
+    # This removes any remaining junk before the actual company name
+    for suffix in ORG_SUFFIXES:
+        # Match the last occurrence of "CapitalizedWords + Suffix" in the string
+        pattern = re.compile(
+            rf'\b([A-Z][\w&]*(?:\s+(?:&\s+)?[A-Z][\w&]*){0,4})\s+{suffix}\b',
+            re.IGNORECASE
+        )
+        matches = list(pattern.finditer(org))
+        if matches:
+            # Take the last match (most likely to be the actual org name)
+            return matches[-1].group(0).strip()
+
+    return org.strip()
+
+
 def _extract_organizations(text: str) -> list[str]:
     """Extract organization names from text.
 
@@ -177,26 +217,54 @@ def _extract_organizations(text: str) -> list[str]:
                 'regards,',      # Email closings
                 'proposal',      # "Project Proposal - Company GmbH"
                 'alignment',     # "Internal Alignment - Company GmbH"
+                'pathway',       # "regulatory pathway for Company GmbH"
+                ' for ',         # "... for Company GmbH"
+                ' the ',         # "... the Company GmbH"
             ]
             if any(keyword in org_lower for keyword in false_positive_keywords):
                 continue
 
             # Remove common title/position prefixes (e.g., "CEO, Company" -> "Company")
-            # Look for pattern: "Title, Organization" or "Title - Organization"
-            if ',' in org or ' - ' in org:
-                parts = re.split(r'[,-]\s*', org)
+            # Look for pattern: "Title, Organization" or "Title - Organization" or "Title\nOrganization"
+            # Split by comma, dash, or newline
+            if ',' in org or ' - ' in org or '\n' in org:
+                # Split by comma, dash, or newline
+                parts = re.split(r'[,\n-]\s*', org)
                 # Check if first part looks like a title (short, no legal suffix)
                 if len(parts) > 1:
-                    first_part = parts[0].lower()
-                    # Common titles to skip
-                    title_keywords = ['ceo', 'cto', 'cfo', 'director', 'manager', 'president',
-                                     'founder', 'owner', 'partner', 'lead', 'head', 'engineer']
+                    first_part = parts[0].lower().strip()
+                    # Common titles to skip (including full forms like "chief operating officer")
+                    title_keywords = [
+                        'ceo', 'cto', 'cfo', 'coo',  # Acronyms
+                        'chief executive officer', 'chief technology officer',
+                        'chief financial officer', 'chief operating officer',
+                        'director', 'manager', 'president', 'vice president',
+                        'founder', 'co-founder', 'owner', 'partner',
+                        'lead', 'head', 'engineer', 'senior', 'principal',
+                        'consultant', 'specialist', 'coordinator'
+                    ]
+                    # Check if first part is a title or contains title keywords
                     if any(keyword in first_part for keyword in title_keywords):
-                        # Use the part after the comma/dash
-                        org = ', '.join(parts[1:]).strip()
+                        # Use the part after the separator (skip the title)
+                        remaining_parts = [p.strip() for p in parts[1:] if p.strip()]
+                        if remaining_parts:
+                            org = ' '.join(remaining_parts).strip()
+
+            # Clean up organization name by extracting just the company name + suffix
+            # This removes prepositional phrases like "the regulatory pathway for Deeplight GmbH"
+            org = _clean_organization_name(org)
+            if not org:
+                continue
 
             # Final validation: must contain the legal suffix
             if not any(org.lower().endswith(suf.lower()) for suf in ORG_SUFFIXES):
+                continue
+
+            # Skip if still contains job title keywords (failed to clean properly)
+            org_check = org.lower()
+            residual_titles = ['chief operating officer', 'chief executive', 'chief technology',
+                              'chief financial', 'vice president', 'senior engineer']
+            if any(title in org_check for title in residual_titles):
                 continue
 
             matches.add(org)

@@ -699,6 +699,48 @@ def _guess_name_from_email(email: str) -> str | None:
     return ' '.join(capitalized)
 
 
+def _match_organization_to_email(email: str, organizations: list[str]) -> str | None:
+    """Match an organization to an email address based on domain similarity.
+
+    This prevents incorrectly assigning organizations mentioned in email content
+    to contacts from different companies.
+
+    Examples:
+    - frank.schaefer@deeplight.ai + ["Deeplight GmbH", "KIT"] -> "Deeplight GmbH"
+    - laila.aoufi@inspiralia.com + ["Deeplight GmbH", "KIT"] -> None (no match)
+    - christian.koos@deeplight.ai + ["Deeplight GmbH"] -> "Deeplight GmbH"
+
+    Args:
+        email: Email address to match
+        organizations: List of extracted organization names
+
+    Returns:
+        Matching organization name or None if no match found
+    """
+    if not email or '@' not in email or not organizations:
+        return None
+
+    # Extract domain from email (e.g., "deeplight.ai" from "frank@deeplight.ai")
+    domain = email.split('@')[1].lower()
+    # Get the main part of the domain (e.g., "deeplight" from "deeplight.ai")
+    domain_main = domain.split('.')[0]
+
+    # Try to match organization name with domain
+    for org in organizations:
+        org_lower = org.lower()
+        # Remove common legal suffixes for matching
+        # Include Swiss/French forms: SA, SAS, SARL
+        org_clean = re.sub(r'\s+(gmbh|ag|inc|llc|ltd|kg|gbr|ug|plc|sa|sas|sarl)$', '', org_lower)
+
+        # Check if domain main part appears in organization name
+        # e.g., "deeplight" in "Deeplight GmbH" or "Deeplight SA"
+        if domain_main in org_clean or org_clean in domain_main:
+            return org
+
+    # No match found - don't assign any organization
+    return None
+
+
 def _entities_to_contacts(source_id: str, entities: EntityIndex, email_record: EmailRecord) -> list[ContactExportRecord]:
     contacts: list[ContactExportRecord] = []
     processed_emails: set[str] = set()
@@ -710,12 +752,15 @@ def _entities_to_contacts(source_id: str, entities: EntityIndex, email_record: E
         if not sender_name:
             sender_name = _guess_name_from_email(sender_email)
 
+        # Match organization based on email domain, not just first organization in list
+        sender_org = _match_organization_to_email(sender_email, entities.organizations)
+
         contacts.append(
             ContactExportRecord(
                 source=source_id,
                 email=sender_email,
                 name=sender_name,
-                organization=entities.organizations[0] if entities.organizations else None,
+                organization=sender_org,
                 notes="Email sender",
             )
         )
@@ -731,12 +776,15 @@ def _entities_to_contacts(source_id: str, entities: EntityIndex, email_record: E
             if not recipient_name:
                 recipient_name = _guess_name_from_email(recipient_email)
 
+            # Match organization based on email domain, not just first organization in list
+            recipient_org = _match_organization_to_email(recipient_email, entities.organizations)
+
             contacts.append(
                 ContactExportRecord(
                     source=source_id,
                     email=recipient_email,
                     name=recipient_name,
-                    organization=entities.organizations[0] if entities.organizations else None,
+                    organization=recipient_org,
                     notes="Email recipient",
                 )
             )
@@ -748,12 +796,15 @@ def _entities_to_contacts(source_id: str, entities: EntityIndex, email_record: E
             # Try to guess name from email address
             guessed_name = _guess_name_from_email(email)
 
+            # Match organization based on email domain, not just first organization in list
+            email_org = _match_organization_to_email(email, entities.organizations)
+
             contacts.append(
                 ContactExportRecord(
                     source=source_id,
                     email=email,
                     name=guessed_name,
-                    organization=entities.organizations[0] if entities.organizations else None,
+                    organization=email_org,
                     phone=entities.phones[0] if entities.phones else None,
                     address=entities.addresses[0] if entities.addresses else None,
                     notes="Auto extracted from content",

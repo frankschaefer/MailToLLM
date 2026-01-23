@@ -144,3 +144,97 @@ Example Street 123
     assert "Deeplight GmbH" in orgs
     # Should not include the job title
     assert not any("Engineer" in org for org in orgs)
+
+
+def test_reject_prepositional_phrase_before_org() -> None:
+    """Test that prepositional phrases before organization name are removed.
+
+    Real bug: "the regulatory pathway for Deeplight GmbH" was extracted as organization.
+    Expected: "Deeplight GmbH" only.
+    """
+    text = "We need to discuss the regulatory pathway for Deeplight GmbH before proceeding."
+    orgs = _extract_organizations(text)
+
+    # Should extract only "Deeplight GmbH", not the full phrase
+    assert "Deeplight GmbH" in orgs
+    assert not any("pathway" in org.lower() for org in orgs)
+    assert not any("regulatory" in org.lower() for org in orgs)
+    assert not any(" for " in org.lower() for org in orgs)
+    assert not any("the " in org.lower() for org in orgs)
+
+
+def test_clean_organization_with_various_prepositions() -> None:
+    """Test cleaning organization names with various prepositional phrases."""
+    test_cases = [
+        ("proposal about Innovation AG", "Innovation AG"),
+        ("meeting with TechCorp GmbH", "TechCorp GmbH"),
+        ("email from Business Ltd", "Business Ltd"),
+        ("presentation to Partners KG", "Partners KG"),
+        ("the Startup UG", "Startup UG"),
+    ]
+
+    for text, expected in test_cases:
+        orgs = _extract_organizations(text)
+        assert expected in orgs, f"Expected '{expected}' in {orgs} for text '{text}'"
+        # Make sure we got the clean version
+        for org in orgs:
+            assert "about" not in org.lower()
+            assert "with" not in org.lower()
+            assert "from" not in org.lower()
+            assert " to " not in org.lower()
+            assert not org.lower().startswith("the ")
+
+
+def test_reject_multiline_title_before_org() -> None:
+    """Test that job titles on separate lines are removed from organization names.
+
+    Real bug: "Chief Operating Officer\nMenhir Photonics AG" was extracted as organization.
+    Expected: "Menhir Photonics AG" only.
+    """
+    text = """Best regards,
+John Doe
+Chief Operating Officer
+Menhir Photonics AG
+Zurich, Switzerland"""
+    orgs = _extract_organizations(text)
+
+    # Should extract only "Menhir Photonics AG", not the title
+    assert "Menhir Photonics AG" in orgs
+    assert not any("Chief Operating Officer" in org for org in orgs)
+    assert not any("operating officer" in org.lower() for org in orgs)
+
+
+def test_reject_full_form_titles() -> None:
+    """Test that full-form titles (not just acronyms) are filtered out."""
+    test_cases = [
+        ("Chief Executive Officer\nTechCorp GmbH", "TechCorp GmbH"),
+        ("Chief Technology Officer, Innovation AG", "Innovation AG"),
+        ("Chief Financial Officer - Finance Ltd", "Finance Ltd"),
+        ("Vice President\nBusiness KG", "Business KG"),
+        ("Senior Engineer\nStartup UG", "Startup UG"),
+    ]
+
+    for text, expected in test_cases:
+        orgs = _extract_organizations(text)
+        assert expected in orgs, f"Expected '{expected}' in {orgs} for text '{text}'"
+        # Make sure title is not in the extracted organization
+        for org in orgs:
+            assert "chief" not in org.lower(), f"Title 'chief' found in '{org}'"
+            assert "officer" not in org.lower(), f"Title 'officer' found in '{org}'"
+            assert "vice president" not in org.lower(), f"Title 'vice president' found in '{org}'"
+            assert "senior engineer" not in org.lower(), f"Title 'senior engineer' found in '{org}'"
+
+
+def test_extract_swiss_french_legal_forms() -> None:
+    """Test extraction of Swiss/French legal forms (SA, SAS, SARL)."""
+    test_cases = [
+        "Deeplight SA is based in Switzerland.",
+        "We work with Innovation SAS in France.",
+        "Contact Business SARL for details.",
+    ]
+
+    orgs = _extract_organizations('\n'.join(test_cases))
+
+    assert "Deeplight SA" in orgs
+    assert "Innovation SAS" in orgs
+    assert "Business SARL" in orgs

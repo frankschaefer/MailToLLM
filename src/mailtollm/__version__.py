@@ -1,6 +1,6 @@
 """Version information for MailToLLM."""
 
-__version__ = "1.0.2"
+__version__ = "1.0.3"
 __version_date__ = "2026-01-23"
 
 # Version history follows Semantic Versioning (https://semver.org/)
@@ -11,6 +11,15 @@ __version_date__ = "2026-01-23"
 # PATCH version: Bug fixes (backwards-compatible)
 #
 # Version History:
+# 1.0.3 (2026-01-23) - Fix incorrect organization assignment to contacts
+#   - Add domain-based organization matching to prevent wrong assignments
+#   - Fix: External contacts no longer assigned to wrong companies
+#   - Clean prepositional phrases from organization names (e.g., "for", "about")
+#   - Remove multi-line job titles from organization extraction
+#   - Add support for Swiss/French legal forms: SA, SAS, SARL
+#   - Expand title keywords to include full forms (e.g., "Chief Operating Officer")
+#   - Add residual title check to prevent incomplete cleanup
+#
 # 1.0.2 (2026-01-23) - Intelligent token overflow recovery
 #   - Add automatic token limit detection from LLM error messages
 #   - Implement multi-stage retry strategy (100% → 60% → 40% → 25%)
