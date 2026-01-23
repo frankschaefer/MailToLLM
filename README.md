@@ -1,6 +1,6 @@
 # MailToLLM
 
-**Version: 1.0.1** | **Release Date: 2026-01-21**
+**Version: 1.0.2** | **Release Date: 2026-01-23**
 
 Python UI app (CustomTkinter) for reading email CSV files and their attachments, then producing LLM-ready structured outputs.
 
@@ -27,17 +27,31 @@ name `local-model`. Override via environment variables:
 - `LLM_STUDIO_URL` - The URL of your LLM Studio API endpoint
 - `LLM_STUDIO_MODEL` - The model name to use
 - `LLM_MAX_CONTEXT_CHARS` - Maximum characters for input text (default: 12000, ~3000 tokens)
+- `LLM_MODEL_CONTEXT_TOKENS` - Model's total context window in tokens (default: 4096)
 - `LLM_TIMEOUT` - Request timeout in seconds (default: 300 = 5 minutes)
 
 ### Context Window Management
-To prevent "context overflow" errors when the model's context window is too small:
-- Input text is automatically truncated to fit within `LLM_MAX_CONTEXT_CHARS`
-- Default is set to 12,000 characters (~3,000 tokens) to work with 4K context models
-- Adjust `LLM_MAX_CONTEXT_CHARS` based on your model's context length:
-  - 4K context models: use 12000 (default)
-  - 8K context models: use 28000
-  - 16K context models: use 60000
-  - 32K+ context models: use 120000 or higher
+The system includes intelligent context window management to prevent token overflow errors:
+
+**Automatic Token Limit Detection:**
+- When a token overflow error occurs, the system automatically detects the model's context limit
+- Extracts the actual token limit from error messages (e.g., "context length of only 4096 tokens")
+- Adjusts future retry attempts based on the detected limit
+
+**Multi-Stage Retry Strategy:**
+- **Attempt 1**: Uses 100% of configured context (full prompt)
+- **Attempt 2**: Reduces to 60% of context if overflow detected
+- **Attempt 3**: Reduces to 40% of context + compact prompt (shorter instructions)
+- **Attempt 4**: Reduces to 25% of context + compact prompt (last resort)
+
+**Configuration:**
+Set `LLM_MODEL_CONTEXT_TOKENS` to match your model's context window:
+- 4K models (default): `LLM_MODEL_CONTEXT_TOKENS=4096`
+- 8K models: `LLM_MODEL_CONTEXT_TOKENS=8192`
+- 16K models: `LLM_MODEL_CONTEXT_TOKENS=16384`
+- 32K+ models: `LLM_MODEL_CONTEXT_TOKENS=32768`
+
+The system automatically reserves 25% of the context for prompts and responses, using the remaining 75% for input text.
 
 ### Timeout Configuration
 If you experience timeout errors during processing:
@@ -51,8 +65,16 @@ If you experience timeout errors during processing:
 The pipeline includes automatic error recovery for LLM failures:
 - **Timeout errors**: Automatically retried up to 2 times (3 total attempts) with 2-second delays
 - **Transient errors** (HTTP 500, connection failures): Records are automatically reprocessed on next run
-- **Context overflow errors**: Not reprocessed (would fail again); increase context limit or truncation is applied
+- **Token overflow errors**: Intelligent multi-stage recovery system
+  - Automatically detects token/context limit errors during processing
+  - System learns the model's actual token limit from error messages
+  - Retries up to 4 times with progressively shorter input text (100% → 60% → 40% → 25%)
+  - Switches to compact prompts on later attempts to save tokens
+  - Records with previous token overflow errors are **automatically reprocessed** on next run
+  - Improved detection covers various error patterns: "context overflow", "token limit", "loaded with context length", etc.
 - **Critical failures**: After all retries exhausted, pipeline pauses with clear error message and can be resumed
+
+**New in v1.0.2**: Token overflow errors are now fully recoverable. Previously failed records will be automatically reprocessed when you run the pipeline again.
 
 ## Contact Management
 The pipeline automatically extracts and manages contacts from emails:

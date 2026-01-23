@@ -1,7 +1,7 @@
 """Version information for MailToLLM."""
 
-__version__ = "1.0.1"
-__version_date__ = "2026-01-21"
+__version__ = "1.0.2"
+__version_date__ = "2026-01-23"
 
 # Version history follows Semantic Versioning (https://semver.org/)
 # Format: MAJOR.MINOR.PATCH
@@ -11,6 +11,15 @@ __version_date__ = "2026-01-21"
 # PATCH version: Bug fixes (backwards-compatible)
 #
 # Version History:
+# 1.0.2 (2026-01-23) - Intelligent token overflow recovery
+#   - Add automatic token limit detection from LLM error messages
+#   - Implement multi-stage retry strategy (100% → 60% → 40% → 25%)
+#   - Add compact prompt mode for later retry attempts
+#   - Auto-reprocess records with previous token overflow errors
+#   - Add configurable model context window (LLM_MODEL_CONTEXT_TOKENS)
+#   - Improve token overflow error detection patterns
+#   - Prevent pipeline halt on recoverable token errors
+#
 # 1.0.1 (2026-01-21) - Bug fixes
 #   - Fix organization extraction matching entire email bodies
 #   - Increase LLM timeout from 60s to 300s (configurable)

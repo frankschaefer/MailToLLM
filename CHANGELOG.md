@@ -5,6 +5,41 @@ All notable changes to MailToLLM will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2] - 2026-01-23
+
+### Added
+- **Intelligent token overflow recovery system**
+  - Automatic detection of model's actual token/context limits from error messages
+  - Multi-stage retry strategy with progressive text reduction (100% → 60% → 40% → 25%)
+  - Compact prompt mode that activates on retry attempts 3+ to save tokens
+  - Configurable model context window via `LLM_MODEL_CONTEXT_TOKENS` environment variable
+  - Automatic calculation of safe input limits (reserves 25% for prompt + response)
+- **Auto-reprocessing of failed records**
+  - Records with previous token overflow errors are automatically reprocessed on next run
+  - Improved error pattern detection for various LLM servers
+  - Clear logging shows when adaptive reduction is being used
+- **Token limit learning**
+  - System extracts actual token limits from error messages (e.g., "4096 tokens")
+  - Dynamically adjusts retry strategy based on detected limits
+  - Supports 2K, 4K, 8K, 16K, 32K+ context models
+
+### Changed
+- Token overflow errors are now treated as recoverable (not critical connection errors)
+- Pipeline no longer halts on HTTP 400 token limit errors
+- Retry attempts increased from 3 to 4 with more aggressive reduction strategy
+- Error detection improved to cover patterns: "trying to keep", "when context", "loaded with context length"
+
+### Fixed
+- Missing `_is_token_overflow_error()` function that prevented retry logic from working
+- Token overflow errors previously skipped during reprocessing are now properly handled
+- HTTP 400 errors with token limits no longer stop the entire pipeline
+
+### Technical Details
+- New constants: `DEFAULT_MODEL_CONTEXT_TOKENS` (4096), `DEFAULT_TOKEN_ESTIMATION_RATIO` (4)
+- New functions: `_is_token_overflow_error()`, `_extract_token_limit_from_error()`
+- Enhanced `_should_reprocess_record()` to recognize and retry token overflow errors
+- Enhanced `_is_llm_connection_error()` to exclude recoverable token errors
+
 ## [1.0.1] - 2026-01-21
 
 ### Fixed

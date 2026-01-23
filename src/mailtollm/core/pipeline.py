@@ -792,7 +792,11 @@ def _is_record_worth_processing(record: dict) -> bool:
 
 
 def _should_reprocess_record(output_path: Path, on_log: LogCallback | None) -> bool:
-    """Check if a record should be reprocessed due to previous LLM errors."""
+    """Check if a record should be reprocessed due to previous LLM errors.
+
+    Now includes token overflow errors since the system has intelligent retry logic
+    that can handle them by progressively reducing input size and using compact prompts.
+    """
     try:
         existing = read_output_json(output_path)
         warnings = existing.get("warnings", [])
@@ -803,22 +807,32 @@ def _should_reprocess_record(output_path: Path, on_log: LogCallback | None) -> b
             if not details:
                 continue
 
-            # Skip context overflow errors - these are not recoverable without truncation
-            if "context" in details.lower() and "overflow" in details.lower():
-                continue
-            if "tokens" in details.lower() and ("4096" in details or "overflows" in details):
-                continue
+            # Token overflow errors are NOW recoverable with new retry logic
+            # Check for token/context overflow errors
+            details_lower = details.lower()
+            if "context" in details_lower and any(x in details_lower for x in ["overflow", "length", "exceeded"]):
+                if on_log:
+                    _log(on_log, f"  → Token overflow detected, will retry with adaptive reduction")
+                return True
+            if "token" in details_lower and any(x in details_lower for x in ["4096", "8192", "overflow", "limit", "maximum"]):
+                if on_log:
+                    _log(on_log, f"  → Token limit error detected, will retry with adaptive reduction")
+                return True
+            if "trying to keep" in details_lower and "when context" in details_lower:
+                if on_log:
+                    _log(on_log, f"  → Context limit error detected, will retry with adaptive reduction")
+                return True
 
-            # Check for recoverable LLM errors
+            # Check for other recoverable LLM errors
             if "HTTP Error 400" in details or "Bad Request" in details:
                 return True
             if "HTTP Error 500" in details or "Internal Server Error" in details:
                 return True
             if "Connection refused" in details or "Connection reset" in details:
                 return True
-            if "timeout" in details.lower():
+            if "timeout" in details_lower:
                 return True
-            if code in ("LLM_CONNECTION_ERROR", "LLM_HTTP_ERROR"):
+            if code in ("LLM_CONNECTION_ERROR", "LLM_HTTP_ERROR", "LLM_ERROR_RESPONSE"):
                 return True
 
         return False
@@ -827,18 +841,38 @@ def _should_reprocess_record(output_path: Path, on_log: LogCallback | None) -> b
 
 
 def _is_llm_connection_error(warning: WarningRecord) -> bool:
-    """Check if a warning indicates a critical LLM connection error that should stop processing."""
+    """Check if a warning indicates a critical LLM connection error that should stop processing.
+
+    Token overflow errors are NOT treated as connection errors since they can be
+    automatically recovered through retry logic with reduced input size.
+    """
     if not warning.details:
         return False
 
-    # Don't treat context overflow as connection error - it's a data issue, not connection issue
+    # Don't treat token/context overflow as connection error - these are now recoverable
     details_lower = warning.details.lower()
-    if "context" in details_lower and "overflow" in details_lower:
-        return False
-    if "tokens" in details_lower and ("4096" in warning.details or "overflows" in details_lower):
+
+    # Check for token/context limit patterns
+    token_error_patterns = [
+        ("context", "overflow"),
+        ("context", "length"),
+        ("context", "exceeded"),
+        ("token", "limit"),
+        ("token", "overflow"),
+        ("token", "maximum"),
+        ("trying to keep", "when context"),
+        ("loaded with context length", "tokens"),
+    ]
+
+    for pattern in token_error_patterns:
+        if all(p in details_lower for p in pattern):
+            return False
+
+    # Also check for specific token numbers (4096, 8192, etc.)
+    if "token" in details_lower and any(str(n) in warning.details for n in [2048, 4096, 8192, 16384, 32768]):
         return False
 
-    # Critical connection errors
+    # Critical connection errors that should stop processing
     error_indicators = [
         "HTTP Error 500",
         "Internal Server Error",
@@ -848,9 +882,14 @@ def _is_llm_connection_error(warning: WarningRecord) -> bool:
         "timed out",
     ]
 
-    # Check error codes
-    if warning.code in ("LLM_CONNECTION_ERROR", "LLM_UNAVAILABLE"):
+    # Check error codes (but exclude LLM_HTTP_ERROR for 400 errors which are often token limits)
+    if warning.code == "LLM_CONNECTION_ERROR":
         return True
+    if warning.code == "LLM_UNAVAILABLE":
+        return True
+    if warning.code == "LLM_HTTP_ERROR" and "400" in warning.details:
+        # HTTP 400 with token/context errors are recoverable, not connection errors
+        return False
 
     details = warning.details
     return any(indicator in details for indicator in error_indicators)
