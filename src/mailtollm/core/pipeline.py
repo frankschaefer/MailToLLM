@@ -706,9 +706,9 @@ def _match_organization_to_email(email: str, organizations: list[str]) -> str | 
     to contacts from different companies.
 
     Examples:
-    - frank.schaefer@deeplight.ai + ["Deeplight GmbH", "KIT"] -> "Deeplight GmbH"
-    - laila.aoufi@inspiralia.com + ["Deeplight GmbH", "KIT"] -> None (no match)
-    - christian.koos@deeplight.ai + ["Deeplight GmbH"] -> "Deeplight GmbH"
+    - bob.admin@acmecorp.com + ["Acme Corp GmbH", "KIT"] -> "Acme Corp GmbH"
+    - carol.smith@consultco.com + ["Acme Corp GmbH", "KIT"] -> None (no match)
+    - david.jones@acmecorp.com + ["Acme Corp GmbH"] -> "Acme Corp GmbH"
 
     Args:
         email: Email address to match
@@ -720,9 +720,9 @@ def _match_organization_to_email(email: str, organizations: list[str]) -> str | 
     if not email or '@' not in email or not organizations:
         return None
 
-    # Extract domain from email (e.g., "deeplight.ai" from "frank@deeplight.ai")
+    # Extract domain from email (e.g., "acmecorp.com" from "bob@acmecorp.com")
     domain = email.split('@')[1].lower()
-    # Get the main part of the domain (e.g., "deeplight" from "deeplight.ai")
+    # Get the main part of the domain (e.g., "acmecorp" from "acmecorp.com")
     domain_main = domain.split('.')[0]
 
     # Try to match organization name with domain
@@ -733,7 +733,7 @@ def _match_organization_to_email(email: str, organizations: list[str]) -> str | 
         org_clean = re.sub(r'\s+(gmbh|ag|inc|llc|ltd|kg|gbr|ug|plc|sa|sas|sarl)$', '', org_lower)
 
         # Check if domain main part appears in organization name
-        # e.g., "deeplight" in "Deeplight GmbH" or "Deeplight SA"
+        # e.g., "acmecorp" in "Acme Corp GmbH" or "Acme Corp SA"
         if domain_main in org_clean or org_clean in domain_main:
             return org
 

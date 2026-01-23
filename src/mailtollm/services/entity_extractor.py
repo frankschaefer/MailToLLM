@@ -251,7 +251,7 @@ def _extract_organizations(text: str) -> list[str]:
                     is_title = any(keyword in first_part for keyword in title_keywords)
 
                     # Check if first part looks like a person name (2-3 capitalized words, no legal suffix)
-                    # Example: "Natalia Hornes" or "John Doe Smith"
+                    # Example: "Alice Manager" or "John Doe Smith"
                     is_person_name = (
                         not is_title and
                         not any(first_part.endswith(suf.lower()) for suf in ORG_SUFFIXES) and

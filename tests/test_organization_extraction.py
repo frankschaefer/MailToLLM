@@ -4,17 +4,17 @@ from mailtollm.services.entity_extractor import _extract_organizations
 
 def test_extract_simple_organization() -> None:
     """Test extracting simple organization names."""
-    text = "I work at Deeplight GmbH in Berlin."
+    text = "I work at Acme Corp GmbH in Berlin."
     orgs = _extract_organizations(text)
-    assert "Deeplight GmbH" in orgs
+    assert "Acme Corp GmbH" in orgs
 
 
 def test_extract_organization_removes_ceo_title() -> None:
     """Test that CEO title is removed from organization name."""
-    text = "Contact CEO, Deeplight GmbH for more information."
+    text = "Contact CEO, Acme Corp GmbH for more information."
     orgs = _extract_organizations(text)
-    assert "Deeplight GmbH" in orgs
-    assert "CEO, Deeplight GmbH" not in orgs
+    assert "Acme Corp GmbH" in orgs
+    assert "CEO, Acme Corp GmbH" not in orgs
 
 
 def test_extract_organization_removes_various_titles() -> None:
@@ -36,23 +36,23 @@ def test_extract_organization_removes_various_titles() -> None:
 
 def test_extract_organization_with_dash_separator() -> None:
     """Test that titles with dash separator are handled."""
-    text = "CEO - Deeplight GmbH"
+    text = "CEO - Acme Corp GmbH"
     orgs = _extract_organizations(text)
-    assert "Deeplight GmbH" in orgs
+    assert "Acme Corp GmbH" in orgs
 
 
 def test_extract_organization_without_title() -> None:
     """Test that organizations without titles are extracted normally."""
-    text = "Deeplight GmbH is a software company."
+    text = "Acme Corp GmbH is a software company."
     orgs = _extract_organizations(text)
-    assert "Deeplight GmbH" in orgs
+    assert "Acme Corp GmbH" in orgs
 
 
 def test_extract_multiple_organizations() -> None:
     """Test extracting multiple organizations from text."""
-    text = "Partnership between Deeplight GmbH and TechCorp AG."
+    text = "Partnership between Acme Corp GmbH and TechCorp AG."
     orgs = _extract_organizations(text)
-    assert "Deeplight GmbH" in orgs
+    assert "Acme Corp GmbH" in orgs
     assert "TechCorp AG" in orgs
 
 
@@ -78,12 +78,12 @@ Ignacio
 ------------------------------------
 Ignacio Robles López
 
-Deeplight GmbH"""
+Acme Corp GmbH"""
     orgs = _extract_organizations(text)
 
-    # Should extract only "Deeplight GmbH", not the entire email body
-    assert "Deeplight GmbH" in orgs
-    assert not any("KORTEQ" in org and "Deeplight GmbH" in org for org in orgs)
+    # Should extract only "Acme Corp GmbH", not the entire email body
+    assert "Acme Corp GmbH" in orgs
+    assert not any("KORTEQ" in org and "Acme Corp GmbH" in org for org in orgs)
     assert not any("internal alignment" in org.lower() for org in orgs)
     assert not any(len(org) > 60 for org in orgs)  # No suspiciously long org names
 
@@ -102,11 +102,11 @@ Ignacio
 --
 Ignacio Robles López
 
-Deeplight GmbH"""
+Acme Corp GmbH"""
     orgs = _extract_organizations(text)
 
-    # Should extract only "Deeplight GmbH"
-    assert "Deeplight GmbH" in orgs
+    # Should extract only "Acme Corp GmbH"
+    assert "Acme Corp GmbH" in orgs
     assert not any("About" in org for org in orgs)
     assert not any("proposal" in org.lower() for org in orgs)
 
@@ -137,11 +137,11 @@ def test_extract_org_from_signature() -> None:
 John Doe
 Senior Engineer
 
-Deeplight GmbH
+Acme Corp GmbH
 Example Street 123
 12345 City"""
     orgs = _extract_organizations(text)
-    assert "Deeplight GmbH" in orgs
+    assert "Acme Corp GmbH" in orgs
     # Should not include the job title
     assert not any("Engineer" in org for org in orgs)
 
@@ -149,14 +149,14 @@ Example Street 123
 def test_reject_prepositional_phrase_before_org() -> None:
     """Test that prepositional phrases before organization name are removed.
 
-    Real bug: "the regulatory pathway for Deeplight GmbH" was extracted as organization.
-    Expected: "Deeplight GmbH" only.
+    Real bug: "the regulatory pathway for Acme Corp GmbH" was extracted as organization.
+    Expected: "Acme Corp GmbH" only.
     """
-    text = "We need to discuss the regulatory pathway for Deeplight GmbH before proceeding."
+    text = "We need to discuss the regulatory pathway for Acme Corp GmbH before proceeding."
     orgs = _extract_organizations(text)
 
-    # Should extract only "Deeplight GmbH", not the full phrase
-    assert "Deeplight GmbH" in orgs
+    # Should extract only "Acme Corp GmbH", not the full phrase
+    assert "Acme Corp GmbH" in orgs
     assert not any("pathway" in org.lower() for org in orgs)
     assert not any("regulatory" in org.lower() for org in orgs)
     assert not any(" for " in org.lower() for org in orgs)
@@ -188,18 +188,18 @@ def test_clean_organization_with_various_prepositions() -> None:
 def test_reject_multiline_title_before_org() -> None:
     """Test that job titles on separate lines are removed from organization names.
 
-    Real bug: "Chief Operating Officer\nMenhir Photonics AG" was extracted as organization.
-    Expected: "Menhir Photonics AG" only.
+    Real bug: "Chief Operating Officer\nTechVision AG" was extracted as organization.
+    Expected: "TechVision AG" only.
     """
     text = """Best regards,
 John Doe
 Chief Operating Officer
-Menhir Photonics AG
+TechVision AG
 Zurich, Switzerland"""
     orgs = _extract_organizations(text)
 
-    # Should extract only "Menhir Photonics AG", not the title
-    assert "Menhir Photonics AG" in orgs
+    # Should extract only "TechVision AG", not the title
+    assert "TechVision AG" in orgs
     assert not any("Chief Operating Officer" in org for org in orgs)
     assert not any("operating officer" in org.lower() for org in orgs)
 
@@ -228,14 +228,14 @@ def test_reject_full_form_titles() -> None:
 def test_extract_swiss_french_legal_forms() -> None:
     """Test extraction of Swiss/French legal forms (SA, SAS, SARL)."""
     test_cases = [
-        "Deeplight SA is based in Switzerland.",
+        "Acme Corp SA is based in Switzerland.",
         "We work with Innovation SAS in France.",
         "Contact Business SARL for details.",
     ]
 
     orgs = _extract_organizations('\n'.join(test_cases))
 
-    assert "Deeplight SA" in orgs
+    assert "Acme Corp SA" in orgs
     assert "Innovation SAS" in orgs
     assert "Business SARL" in orgs
 
@@ -243,20 +243,20 @@ def test_extract_swiss_french_legal_forms() -> None:
 def test_reject_person_name_before_org() -> None:
     """Test that person names before organization are removed from email signatures.
 
-    Real bug: "Natalia Hornes\nDeeplight SA" was extracted as organization.
-    Expected: "Deeplight SA" only.
+    Real bug: "Alice Manager\nAcme Corp SA" was extracted as organization.
+    Expected: "Acme Corp SA" only.
     """
     text = """Best regards
 
-Natalia Hornes
-Deeplight SA
+Alice Manager
+Acme Corp SA
 Business Operations & Administration
-natalia.hornes@deeplight.ai"""
+alice.manager@acmecorp.com"""
     orgs = _extract_organizations(text)
 
-    # Should extract only "Deeplight SA", not the person name
-    assert "Deeplight SA" in orgs
-    assert not any("Natalia Hornes" in org for org in orgs)
+    # Should extract only "Acme Corp SA", not the person name
+    assert "Acme Corp SA" in orgs
+    assert not any("Alice Manager" in org for org in orgs)
     assert not any("natalia" in org.lower() for org in orgs)
 
 

@@ -322,51 +322,51 @@ def test_contact_extraction_mixed_valid_invalid_recipients() -> None:
 def test_contact_extraction_does_not_assign_wrong_organization() -> None:
     """Test that organization from email body is NOT incorrectly assigned to all contacts.
 
-    Real-world bug: Email about "Deeplight ESR" project includes "laila.aoufi@inspiralia.com"
-    in CC field. The system was incorrectly assigning "Deeplight GmbH" (from email subject/body)
+    Bug scenario: Email about "Acme Corp ESR" project includes "carol.smith@consultco.com"
+    in CC field. The system was incorrectly assigning "Acme Corp GmbH" (from email subject/body)
     to all contacts, including those from different companies.
 
     Expected behavior: Organization should only be assigned if we can reliably determine
     the person belongs to that organization (e.g., from email domain matching).
     """
     email = EmailRecord(
-        id="email-deeplight-esr",
-        subject="RE: Deeplight ESR",
-        sender="frank.schaefer@deeplight.ai",
+        id="email-acme-esr",
+        subject="RE: Acme Corp ESR",
+        sender="bob.admin@acmecorp.com",
         recipients=[
-            "Laila Aoufi <laila.aoufi@inspiralia.com>",  # Different company!
-            "Christian Koos <christian.koos@deeplight.ai>",  # Same company
+            "Carol Smith <carol.smith@consultco.com>",  # Different company!
+            "David Jones <david.jones@acmecorp.com>",  # Same company
         ],
         date="2025-12-17",
-        body_text="Dear all, regarding the Deeplight ESR project...",
+        body_text="Dear all, regarding the Acme Corp ESR project...",
     )
 
     # Simulate organization extraction from body text
     entities = EntityIndex(
         emails=[],
-        organizations=["Deeplight GmbH"],  # Extracted from subject/body
+        organizations=["Acme Corp GmbH"],  # Extracted from subject/body
         people=[],
         phones=[],
         addresses=[],
     )
 
-    contacts = _entities_to_contacts("email-deeplight-esr", entities, email)
+    contacts = _entities_to_contacts("email-acme-esr", entities, email)
 
     # Should have 3 contacts
     assert len(contacts) == 3
 
     # Find contacts by email
-    laila = next(c for c in contacts if c.email == "laila.aoufi@inspiralia.com")
-    christian = next(c for c in contacts if c.email == "christian.koos@deeplight.ai")
-    frank = next(c for c in contacts if c.email == "frank.schaefer@deeplight.ai")
+    carol = next(c for c in contacts if c.email == "carol.smith@consultco.com")
+    david = next(c for c in contacts if c.email == "david.jones@acmecorp.com")
+    bob = next(c for c in contacts if c.email == "bob.admin@acmecorp.com")
 
-    # CRITICAL: laila.aoufi@inspiralia.com should NOT be assigned to "Deeplight GmbH"
+    # CRITICAL: carol.smith@consultco.com should NOT be assigned to "Acme Corp GmbH"
     # The current implementation incorrectly assigns the first organization to ALL contacts
     # This should be None or derived from email domain
-    assert laila.organization != "Deeplight GmbH", \
-        "laila.aoufi@inspiralia.com should NOT be assigned to Deeplight GmbH"
+    assert carol.organization != "Acme Corp GmbH", \
+        "carol.smith@consultco.com should NOT be assigned to Acme Corp GmbH"
 
-    # Contacts with @deeplight.ai domain could reasonably be assigned to Deeplight GmbH
+    # Contacts with @acmecorp.com domain could reasonably be assigned to Acme Corp GmbH
     # (though ideally this should be based on domain matching, not just first org in list)
     # For now we just verify the bug is fixed for external contacts
 
@@ -376,16 +376,16 @@ def test_contact_extraction_matches_swiss_french_legal_forms() -> None:
     email = EmailRecord(
         id="email-swiss-sa",
         subject="Test",
-        sender="natalia.hornes@deeplight.ai",
+        sender="alice.manager@acmecorp.com",
         recipients=[],
         date="2025-12-17",
-        body_text="Discussion about Deeplight SA operations.",
+        body_text="Discussion about Acme Corp SA operations.",
     )
 
     # Simulate organization extraction with SA suffix
     entities = EntityIndex(
         emails=[],
-        organizations=["Deeplight SA", "Menhir Photonics AG"],
+        organizations=["Acme Corp SA", "TechVision AG"],
         people=[],
         phones=[],
         addresses=[],
@@ -396,11 +396,11 @@ def test_contact_extraction_matches_swiss_french_legal_forms() -> None:
     # Should have 1 contact
     assert len(contacts) == 1
 
-    natalia = contacts[0]
-    assert natalia.email == "natalia.hornes@deeplight.ai"
+    alice = contacts[0]
+    assert alice.email == "alice.manager@acmecorp.com"
 
-    # CRITICAL: natalia.hornes@deeplight.ai should be assigned to "Deeplight SA" (not Menhir Photonics AG)
-    assert natalia.organization == "Deeplight SA", \
-        f"Expected 'Deeplight SA', got '{natalia.organization}'"
-    assert natalia.organization != "Menhir Photonics AG", \
-        "natalia.hornes@deeplight.ai should NOT be assigned to Menhir Photonics AG"
+    # CRITICAL: alice.manager@acmecorp.com should be assigned to "Acme Corp SA" (not TechVision AG)
+    assert alice.organization == "Acme Corp SA", \
+        f"Expected 'Acme Corp SA', got '{alice.organization}'"
+    assert alice.organization != "TechVision AG", \
+        "alice.manager@acmecorp.com should NOT be assigned to TechVision AG"
