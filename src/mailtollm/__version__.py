@@ -1,6 +1,6 @@
 """Version information for MailToLLM."""
 
-__version__ = "1.0.6"
+__version__ = "1.0.7"
 __version_date__ = "2026-01-23"
 
 # Version history follows Semantic Versioning (https://semver.org/)
@@ -11,6 +11,11 @@ __version_date__ = "2026-01-23"
 # PATCH version: Bug fixes (backwards-compatible)
 #
 # Version History:
+# 1.0.7 (2026-01-23) - Add application launcher and comprehensive start guide
+#   - Add run.py launcher script for easy app startup without installation
+#   - Add START.md with multiple startup methods and troubleshooting
+#   - Document icon usage and standalone app creation with PyInstaller
+#
 # 1.0.6 (2026-01-23) - Add macOS application icon and clean up documentation
 #   - Add custom icon for macOS application (envelope with AI theme)
 #   - Implement window icon display in CustomTkinter app
