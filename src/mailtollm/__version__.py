@@ -1,6 +1,6 @@
 """Version information for MailToLLM."""
 
-__version__ = "1.0.3"
+__version__ = "1.0.4"
 __version_date__ = "2026-01-23"
 
 # Version history follows Semantic Versioning (https://semver.org/)
@@ -11,6 +11,12 @@ __version_date__ = "2026-01-23"
 # PATCH version: Bug fixes (backwards-compatible)
 #
 # Version History:
+# 1.0.4 (2026-01-23) - Fix person names in organization extraction
+#   - Remove person names before organization in email signatures
+#   - Fix: "Natalia Hornes\nDeeplight SA" now correctly extracts as "Deeplight SA"
+#   - Add detection for capitalized person names (2-4 words without legal suffix)
+#   - Improve signature parsing to separate names from company names
+#
 # 1.0.3 (2026-01-23) - Fix incorrect organization assignment to contacts
 #   - Add domain-based organization matching to prevent wrong assignments
 #   - Fix: External contacts no longer assigned to wrong companies

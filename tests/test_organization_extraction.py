@@ -238,3 +238,47 @@ def test_extract_swiss_french_legal_forms() -> None:
     assert "Deeplight SA" in orgs
     assert "Innovation SAS" in orgs
     assert "Business SARL" in orgs
+
+
+def test_reject_person_name_before_org() -> None:
+    """Test that person names before organization are removed from email signatures.
+
+    Real bug: "Natalia Hornes\nDeeplight SA" was extracted as organization.
+    Expected: "Deeplight SA" only.
+    """
+    text = """Best regards
+
+Natalia Hornes
+Deeplight SA
+Business Operations & Administration
+natalia.hornes@deeplight.ai"""
+    orgs = _extract_organizations(text)
+
+    # Should extract only "Deeplight SA", not the person name
+    assert "Deeplight SA" in orgs
+    assert not any("Natalia Hornes" in org for org in orgs)
+    assert not any("natalia" in org.lower() for org in orgs)
+
+
+def test_reject_various_person_names_before_org() -> None:
+    """Test that various person name patterns before organizations are filtered."""
+    test_cases = [
+        ("John Doe\nTechCorp GmbH", "TechCorp GmbH"),
+        ("Alice Smith\nInnovation AG", "Innovation AG"),
+        ("Bob Johnson Miller\nBusiness Ltd", "Business Ltd"),
+        ("Dr. Sarah Williams\nResearch KG", "Research KG"),
+    ]
+
+    for text, expected in test_cases:
+        orgs = _extract_organizations(text)
+        assert expected in orgs, f"Expected '{expected}' in {orgs} for text '{text}'"
+        # Make sure person name is not in the extracted organization
+        for org in orgs:
+            # Extract the person name part (before \n)
+            person_name = text.split('\n')[0].strip()
+            # Remove title prefixes like "Dr."
+            person_name_words = [w for w in person_name.split() if not w.endswith('.')]
+            # Check that no part of the person name is in the org
+            for word in person_name_words:
+                if len(word) > 2:  # Skip very short words like "Dr"
+                    assert word not in org, f"Person name word '{word}' found in '{org}'"

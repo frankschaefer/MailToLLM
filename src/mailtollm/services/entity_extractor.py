@@ -225,6 +225,7 @@ def _extract_organizations(text: str) -> list[str]:
                 continue
 
             # Remove common title/position prefixes (e.g., "CEO, Company" -> "Company")
+            # Also remove person names before organization (e.g., "John Doe\nCompany SA" -> "Company SA")
             # Look for pattern: "Title, Organization" or "Title - Organization" or "Title\nOrganization"
             # Split by comma, dash, or newline
             if ',' in org or ' - ' in org or '\n' in org:
@@ -233,6 +234,8 @@ def _extract_organizations(text: str) -> list[str]:
                 # Check if first part looks like a title (short, no legal suffix)
                 if len(parts) > 1:
                     first_part = parts[0].lower().strip()
+                    first_part_orig = parts[0].strip()
+
                     # Common titles to skip (including full forms like "chief operating officer")
                     title_keywords = [
                         'ceo', 'cto', 'cfo', 'coo',  # Acronyms
@@ -243,9 +246,21 @@ def _extract_organizations(text: str) -> list[str]:
                         'lead', 'head', 'engineer', 'senior', 'principal',
                         'consultant', 'specialist', 'coordinator'
                     ]
+
                     # Check if first part is a title or contains title keywords
-                    if any(keyword in first_part for keyword in title_keywords):
-                        # Use the part after the separator (skip the title)
+                    is_title = any(keyword in first_part for keyword in title_keywords)
+
+                    # Check if first part looks like a person name (2-3 capitalized words, no legal suffix)
+                    # Example: "Natalia Hornes" or "John Doe Smith"
+                    is_person_name = (
+                        not is_title and
+                        not any(first_part.endswith(suf.lower()) for suf in ORG_SUFFIXES) and
+                        len(first_part_orig.split()) <= 4 and  # Max 4 words
+                        all(word[0].isupper() for word in first_part_orig.split() if word)  # All words capitalized
+                    )
+
+                    if is_title or is_person_name:
+                        # Use the part after the separator (skip the title/name)
                         remaining_parts = [p.strip() for p in parts[1:] if p.strip()]
                         if remaining_parts:
                             org = ' '.join(remaining_parts).strip()
