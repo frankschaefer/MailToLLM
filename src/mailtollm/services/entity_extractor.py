@@ -146,9 +146,9 @@ def _clean_organization_name(org: str) -> str:
     """Clean organization name by removing prepositional phrases and keeping only the core name.
 
     Examples:
-    - "the regulatory pathway for Deeplight GmbH" -> "Deeplight GmbH"
+    - "the regulatory pathway for Acme Corp GmbH" -> "Acme Corp GmbH"
     - "Proposal About Innovation AG" -> "Innovation AG"
-    - "Deeplight GmbH" -> "Deeplight GmbH" (unchanged)
+    - "Acme Corp GmbH" -> "Acme Corp GmbH" (unchanged)
 
     Returns empty string if no valid organization name can be extracted.
     """
@@ -187,7 +187,7 @@ def _extract_organizations(text: str) -> list[str]:
 
     Filters out common patterns that are not organizations:
     - Limits to 2-5 words before legal suffix (prevents matching long text)
-    - Removes titles/positions before organization (e.g., "CEO, Deeplight GmbH" -> "Deeplight GmbH")
+    - Removes titles/positions before organization (e.g., "CEO, Acme Corp GmbH" -> "Acme Corp GmbH")
     - Filters out common false positives (job titles, email subjects)
     """
     matches: set[str] = set()
@@ -266,7 +266,7 @@ def _extract_organizations(text: str) -> list[str]:
                             org = ' '.join(remaining_parts).strip()
 
             # Clean up organization name by extracting just the company name + suffix
-            # This removes prepositional phrases like "the regulatory pathway for Deeplight GmbH"
+            # This removes prepositional phrases like "the regulatory pathway for Acme Corp GmbH"
             org = _clean_organization_name(org)
             if not org:
                 continue

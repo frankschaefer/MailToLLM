@@ -13,6 +13,12 @@ authors = [
   { name = "Frank" }
 ]
 
+[tool.hatch.build.targets.wheel]
+packages = ["src/mailtollm"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/mailtollm/resources" = "mailtollm/resources"
+
 dependencies = [
   "customtkinter>=5.2",
   "pandas>=2.2",

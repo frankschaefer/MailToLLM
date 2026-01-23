@@ -8,6 +8,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
+from PIL import Image
 
 from mailtollm.__version__ import __version__, __version_date__
 from mailtollm.core.pipeline import run_pipeline
@@ -22,6 +23,14 @@ class MailToLLMApp(ctk.CTk):
         self.title(f"MailToLLM v{__version__}")
         self.geometry("980x680")
         self.minsize(920, 620)
+
+        # Set window icon
+        icon_path = Path(__file__).parent.parent / "resources" / "icon.png"
+        if icon_path.exists():
+            try:
+                self.iconphoto(True, ctk.CTkImage(light_image=Image.open(icon_path))._light_image)
+            except Exception:
+                pass  # Silently ignore if icon loading fails
 
         self.csv_path_var = ctk.StringVar()
         self.attachments_root_var = ctk.StringVar()

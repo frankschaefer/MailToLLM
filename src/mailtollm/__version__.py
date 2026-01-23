@@ -1,6 +1,6 @@
 """Version information for MailToLLM."""
 
-__version__ = "1.0.5"
+__version__ = "1.0.6"
 __version_date__ = "2026-01-23"
 
 # Version history follows Semantic Versioning (https://semver.org/)
@@ -11,6 +11,13 @@ __version_date__ = "2026-01-23"
 # PATCH version: Bug fixes (backwards-compatible)
 #
 # Version History:
+# 1.0.6 (2026-01-23) - Add macOS application icon and clean up documentation
+#   - Add custom icon for macOS application (envelope with AI theme)
+#   - Implement window icon display in CustomTkinter app
+#   - Add icon generation script for future updates
+#   - Replace remaining real company names in code comments
+#   - Configure hatchling to include icon resources in package
+#
 # 1.0.5 (2026-01-23) - Replace real company and person names with fictional examples
 #   - Replace all real company names in tests and documentation with fictional names
 #   - Replace all real person names and email addresses with fictional examples
