@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Geh-Rechner: Berechne wie viel du laufen musst, um dein Wunschgewicht zu erreichen – basierend auf Größe, Gewicht, Alter, Level und Zielgewicht." />
+  <title>WalkFit – Wie viel muss ich gehen, um abzunehmen?</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="aurora" aria-hidden="true"></div>
+
+  <header class="site-header">
+    <a class="brand" href="#top">
+      <span class="brand-mark">🚶‍♀️</span>
+      <span class="brand-text">Walk<span>Fit</span></span>
+    </a>
+    <nav class="site-nav">
+      <a href="#rechner">Rechner</a>
+      <a href="#how">So funktioniert's</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">Geh-Rechner zum Abnehmen</p>
+        <h1>Wie viel muss ich <span class="grad">gehen</span>, um mein Wunschgewicht zu erreichen?</h1>
+        <p class="lead">
+          Gib Größe, Gewicht, Alter, dein Fitness-Level und dein Zielgewicht ein.
+          Wir berechnen deinen persönlichen Geh-Plan: Schritte, Strecke, Dauer
+          und wie viele Wochen es realistisch dauert.
+        </p>
+        <a class="hero-cta" href="#rechner">Jetzt berechnen →</a>
+      </div>
+      <div class="hero-art" aria-hidden="true">
+        <div class="walker">🚶‍♀️</div>
+        <div class="ring ring-1"></div>
+        <div class="ring ring-2"></div>
+        <div class="ring ring-3"></div>
+      </div>
+    </section>
+
+    <!-- ============ RECHNER ============ -->
+    <section id="rechner" class="calc">
+      <div class="calc-card">
+        <div class="calc-head">
+          <h2>Dein Geh-Plan</h2>
+          <div class="unit-toggle" role="group" aria-label="Einheiten wählen">
+            <button type="button" class="unit-btn active" data-unit="metric">kg · cm</button>
+            <button type="button" class="unit-btn" data-unit="imperial">lbs · ft/in</button>
+          </div>
+        </div>
+
+        <form id="walkForm" class="calc-grid" novalidate>
+          <!-- Größe -->
+          <fieldset class="field field-height">
+            <legend>Größe</legend>
+            <div class="metric-only inputs-row">
+              <label class="sr-only" for="heightCm">Größe in cm</label>
+              <input id="heightCm" type="number" min="120" max="220" step="1" value="158" inputmode="numeric" />
+              <span class="suffix">cm</span>
+            </div>
+            <div class="imperial-only inputs-row hidden">
+              <input id="heightFt" type="number" min="3" max="7" step="1" value="5" inputmode="numeric" aria-label="Größe Fuß" />
+              <span class="suffix">ft</span>
+              <input id="heightIn" type="number" min="0" max="11" step="1" value="2" inputmode="numeric" aria-label="Größe Zoll" />
+              <span class="suffix">in</span>
+            </div>
+          </fieldset>
+
+          <!-- Gewicht -->
+          <fieldset class="field field-weight">
+            <legend>Aktuelles Gewicht</legend>
+            <div class="inputs-row">
+              <input id="weight" type="number" min="40" max="320" step="0.5" value="95" inputmode="decimal" aria-label="Aktuelles Gewicht" />
+              <span class="suffix unit-weight">kg</span>
+            </div>
+            <input id="weightRange" type="range" min="40" max="200" step="0.5" value="95" class="slider" aria-label="Gewicht Schieberegler" />
+          </fieldset>
+
+          <!-- Alter -->
+          <fieldset class="field field-age">
+            <legend>Alter</legend>
+            <div class="inputs-row">
+              <input id="age" type="number" min="14" max="99" step="1" value="55" inputmode="numeric" aria-label="Alter" />
+              <span class="suffix">Jahre</span>
+            </div>
+            <input id="ageRange" type="range" min="14" max="90" step="1" value="55" class="slider" aria-label="Alter Schieberegler" />
+          </fieldset>
+
+          <!-- Geschlecht -->
+          <fieldset class="field field-sex">
+            <legend>Geschlecht</legend>
+            <div class="seg" role="group">
+              <input type="radio" name="sex" id="sexF" value="female" checked />
+              <label for="sexF">Weiblich</label>
+              <input type="radio" name="sex" id="sexM" value="male" />
+              <label for="sexM">Männlich</label>
+            </div>
+          </fieldset>
+
+          <!-- Level -->
+          <fieldset class="field field-level">
+            <legend>Level</legend>
+            <div class="seg seg-3" role="group">
+              <input type="radio" name="level" id="lvlB" value="beginner" checked />
+              <label for="lvlB">Anfänger</label>
+              <input type="radio" name="level" id="lvlI" value="intermediate" />
+              <label for="lvlI">Mittel</label>
+              <input type="radio" name="level" id="lvlA" value="advanced" />
+              <label for="lvlA">Profi</label>
+            </div>
+            <p class="hint" id="levelHint">Anfänger: gemütliches Tempo, kürzere Einheiten.</p>
+          </fieldset>
+
+          <!-- Zielgewicht -->
+          <fieldset class="field field-goal">
+            <legend>Zielgewicht</legend>
+            <div class="inputs-row">
+              <input id="goal" type="number" min="40" max="300" step="0.5" value="59" inputmode="decimal" aria-label="Zielgewicht" />
+              <span class="suffix unit-weight">kg</span>
+            </div>
+            <input id="goalRange" type="range" min="40" max="200" step="0.5" value="59" class="slider" aria-label="Zielgewicht Schieberegler" />
+          </fieldset>
+
+          <button type="submit" class="calculate-btn">BERECHNEN <span class="walk-ico">🚶</span></button>
+        </form>
+      </div>
+
+      <!-- ============ ERGEBNIS ============ -->
+      <div id="result" class="result hidden" aria-live="polite">
+        <div class="result-head">
+          <h3>Dein persönlicher Geh-Plan</h3>
+          <p id="resultSummary" class="result-summary"></p>
+        </div>
+
+        <div class="bmi-bar">
+          <div class="bmi-track">
+            <span class="bmi-seg s-under"></span>
+            <span class="bmi-seg s-normal"></span>
+            <span class="bmi-seg s-over"></span>
+            <span class="bmi-seg s-obese"></span>
+            <span id="bmiMarker" class="bmi-marker" style="left:50%"></span>
+          </div>
+          <div class="bmi-labels"><span>Unter</span><span>Normal</span><span>Über</span><span>Adipös</span></div>
+          <p class="bmi-text">Aktueller BMI: <strong id="bmiNow">–</strong> · Ziel-BMI: <strong id="bmiGoal">–</strong></p>
+        </div>
+
+        <div class="stats">
+          <div class="stat">
+            <span class="stat-ico">⚖️</span>
+            <span class="stat-val" id="rLoss">–</span>
+            <span class="stat-lbl">abzunehmen</span>
+          </div>
+          <div class="stat">
+            <span class="stat-ico">📅</span>
+            <span class="stat-val" id="rWeeks">–</span>
+            <span class="stat-lbl">bis zum Ziel</span>
+          </div>
+          <div class="stat">
+            <span class="stat-ico">👣</span>
+            <span class="stat-val" id="rSteps">–</span>
+            <span class="stat-lbl">Schritte / Tag</span>
+          </div>
+          <div class="stat">
+            <span class="stat-ico">⏱️</span>
+            <span class="stat-val" id="rTime">–</span>
+            <span class="stat-lbl">Gehen / Tag</span>
+          </div>
+          <div class="stat">
+            <span class="stat-ico">📏</span>
+            <span class="stat-val" id="rDist">–</span>
+            <span class="stat-lbl">Strecke / Tag</span>
+          </div>
+          <div class="stat">
+            <span class="stat-ico">🔥</span>
+            <span class="stat-val" id="rKcal">–</span>
+            <span class="stat-lbl">kcal / Tag (Gehen)</span>
+          </div>
+        </div>
+
+        <div class="plan">
+          <h4>Dein Wochenplan</h4>
+          <div class="week" id="weekGrid"></div>
+        </div>
+
+        <div class="milestones">
+          <h4>Etappenziele</h4>
+          <ul id="milestoneList"></ul>
+        </div>
+
+        <p class="disclaimer">
+          ⚕️ Hinweis: Diese Berechnung dient der Orientierung und ersetzt keine
+          medizinische Beratung. Ein gesunder Gewichtsverlust liegt bei
+          ca. 0,25–0,75&nbsp;kg pro Woche. Sprich vor Beginn eines neuen
+          Trainingsprogramms mit deinem Arzt.
+        </p>
+      </div>
+    </section>
+
+    <!-- ============ HOW ============ -->
+    <section id="how" class="how">
+      <h2>So funktioniert der Rechner</h2>
+      <div class="cards">
+        <article class="info-card">
+          <span class="info-num">1</span>
+          <h3>Energiebilanz</h3>
+          <p>Etwa <strong>7.700&nbsp;kcal</strong> entsprechen 1&nbsp;kg Körperfett. Wir berechnen, wie viel Defizit du übers Gehen aufbauen kannst.</p>
+        </article>
+        <article class="info-card">
+          <span class="info-num">2</span>
+          <h3>Kalorien pro Schritt</h3>
+          <p>Dein Verbrauch hängt von <strong>Gewicht, Tempo und Level</strong> ab. Schwerer + schneller = mehr verbrannte Kalorien pro Kilometer.</p>
+        </article>
+        <article class="info-card">
+          <span class="info-num">3</span>
+          <h3>Realistischer Plan</h3>
+          <p>Wir deckeln den Verlust auf ein <strong>gesundes Tempo</strong> und verteilen das Gehen auf einen machbaren Wochenplan.</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- ============ FAQ ============ -->
+    <section id="faq" class="faq">
+      <h2>Häufige Fragen</h2>
+      <details>
+        <summary>Wie genau ist der Kalorienverbrauch beim Gehen?</summary>
+        <p>Wir nutzen MET-Werte (metabolisches Äquivalent) je nach Tempo und dein Körpergewicht. Die Werte sind gute Schätzungen, individuelle Unterschiede (Untergrund, Steigung, Effizienz) sind möglich.</p>
+      </details>
+      <details>
+        <summary>Reicht Gehen allein zum Abnehmen?</summary>
+        <p>Gehen ist ein starker Hebel, aber Ernährung entscheidet maßgeblich. Kombiniere den Geh-Plan mit einer leichten Kalorienreduktion über die Ernährung für die besten Ergebnisse.</p>
+      </details>
+      <details>
+        <summary>Warum dauert mein Plan so lange / so kurz?</summary>
+        <p>Wir begrenzen den wöchentlichen Verlust auf einen gesunden Bereich. Sehr große Ziele brauchen entsprechend Zeit – nachhaltig ist besser als crash.</p>
+      </details>
+      <details>
+        <summary>Was bedeuten die Level?</summary>
+        <p><strong>Anfänger</strong> ≈ 4&nbsp;km/h gemütlich, <strong>Mittel</strong> ≈ 5,5&nbsp;km/h zügig, <strong>Profi</strong> ≈ 6,5&nbsp;km/h sportlich (Power-Walking). Höheres Level = mehr Verbrauch pro Minute.</p>
+      </details>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>WalkFit · Geh-Rechner zum Abnehmen · Nur zu Informationszwecken.</p>
+    <p class="muted">Keine medizinische Beratung. Erstellt als Demo-Projekt.</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
